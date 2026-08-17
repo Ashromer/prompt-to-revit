@@ -1,19 +1,19 @@
-# Estado del proyecto — última actualización 2026-08-17
+# Estado del proyecto — última actualización 2026-08-17 (sesión 2, en curso — PoC #2 a medias)
 
 Fichero de relevo entre sesiones. Léelo antes de continuar. La verdad detallada está en
 `specs/` y en el `plan.md` del PoC; esto es el mapa.
 
 ## Dónde está el trabajo ahora mismo
 
-El PoC #1 se desarrolla en un **worktree**, no en esta carpeta raíz:
+**Corrección sobre la versión anterior de este fichero**: el merge ya ocurrió. `feature/001-poc-sdk-mcp-net`
+se fusionó en `dev` en el commit `088db80`, **en local**; el código del PoC ya vive en
+`pocs/001-poc-1-sdk-oficial-de-mcp-para-net/` en la raíz del repo, no solo en el worktree. El worktree
+(`.worktrees\001-poc-sdk-mcp-net`, rama `feature/001-poc-sdk-mcp-net`) sigue existiendo pero ya no es
+la única copia. `dev` tiene commits que **no están en GitHub todavía** (`git status`: "ahead of
+'origin/dev' by N commits").
 
-```
-D:\Arquitectura\W_TRABAJOS\12_IA_OPT\2605_PROMPT_TO_REVIT\.worktrees\001-poc-sdk-mcp-net
-rama: feature/001-poc-sdk-mcp-net
-```
-
-Esa rama tiene 4 commits que **no están en GitHub todavía**. La raíz (`dev` / `main`) no contiene
-los ficheros del PoC: si buscas `pocs/` aquí y no aparece, es por eso.
+**Hay un segundo worktree activo**, para el PoC #2, creado en esta misma sesión — ver la sección
+"PoC #2 — EN EJECUCIÓN AHORA MISMO" más abajo, es lo más importante de este fichero ahora mismo.
 
 ## PoC #1 — SDK oficial de MCP para .NET
 
@@ -23,44 +23,32 @@ Plan y estado por tarea: `specs/001-poc-1-sdk-oficial-de-mcp-para-net/plan.md` (
 |---|---|
 | 1 — Reconocimiento | cerrado (2/2) |
 | 2 — El experimento | cerrado (6/6) |
-| 3 — Verificación | cerrado (2/2), ejecutado por el usuario |
-| 4 — Veredicto y cierre | **pendiente (0/4)** ← siguiente trabajo |
+| 3 — Verificación | cerrado (2/2) |
+| 4 — Veredicto y cierre | **cerrado (4/4)** |
 
-### Veredicto empírico: PELDAÑO 1. ADR-001 confirmado.
+**Corrección de un error de esta misma sección en la versión anterior**: la tabla de métodos JSON-RPC
+más abajo decía que `initialize` se vio "0 veces" y lo dejaba como pregunta abierta. Es falso: el log
+completo (ya en el commit `cf8cd25`, seis minutos antes de este fichero) muestra `initialize` **6
+veces**, en las sesiones más tempranas. A partir de cierto punto el cliente cambia a `server/discover`
++ `subscriptions/listen`. No es un misterio: es el riesgo R4 que ya anticipaba `DECISION-PELDANO.md`
+§6. Detalle completo en `pocs/001-poc-1-sdk-oficial-de-mcp-para-net/VEREDICTO.md` §3.
 
-`ModelContextProtocol` **2.2.0** estable. `Microsoft.Extensions.Hosting` **8.0.0**.
-Los tres criterios verificados por el usuario en una sesión real de Claude Code, con evidencia
-pegada en `pocs/001-poc-1-sdk-oficial-de-mcp-para-net/GUION-VERIFICACION.md`:
+**Veredicto: PELDAÑO 1. ADR-001 confirmado.** `ModelContextProtocol` 2.2.0, `Microsoft.Extensions.Hosting`
+8.0.0. Los cuatro criterios (SC-001, SC-002, SC-003, publicación/arranque) cumplidos con evidencia real
+anotada por el usuario en `GUION-VERIFICACION.md`. `specs/tech-spec.md` (ADR-001, Tech Stack,
+Dependencies, Discovery), `specs/roadmap.md` (Gate Fase 0) y el `requirements.md` del PoC (FR-011,
+FR-012, Status) actualizados.
 
-- **SC-001** cumplido. Claude describió `mensaje` string obligatorio y `repeticiones` integer
-  obligatorio, con las descripciones de los atributos `[Description]`. El esquema tipado llega
-  completo, incluido `required`.
-- **SC-002** cumplido en los tres casos. Los valores vuelven literales.
-- **SC-003** cumplido. Traza íntegra con los dos marcadores, cadena de `InnerException` completa.
-  El doble escapado no es un problema en la práctica: Claude Code la entrega decodificada.
+**`@judge` revisó `VEREDICTO.md`: CHANGES_REQUESTED en la primera pasada, ya corregido.** El veredicto
+de fondo (peldaño 1) quedó confirmado como bien fundado; los dos bloqueantes eran un recuento erróneo
+de `tools/call` en la instrumentación (7→9, mezclaba dos métodos de conteo) y que `requirements.md`
+seguía pidiendo "comparación carácter por carácter" para SC-003 cuando lo verificado fue la presencia
+de los dos marcadores (el string sufre doble escapado en el JSON-RPC). Ambos corregidos en
+`VEREDICTO.md` y `requirements.md`; el "misterio" del `initialize` que corregía este mismo fichero en
+la versión anterior fue confirmado exacto por `@judge`, contando a mano. Detalle completo del veredicto
+y de la revisión en `pocs/001-poc-1-sdk-oficial-de-mcp-para-net/VEREDICTO.md`.
 
-### Hallazgo que cambia una decisión
-
-La instrumentación (`%LOCALAPPDATA%\PocMcpSdk\rpc-methods.log`) registró que Claude Code, en tres
-sesiones, invocó:
-
-| Método | Veces | ¿Estándar MCP? |
-|---|---|---|
-| `tools/call` | 4 | sí |
-| `tools/list` | 3 | sí |
-| `server/discover` | 3 | **no** |
-| `subscriptions/listen` | 3 | **no** |
-| `initialize` | **0** | sí, y obligatorio por especificación |
-
-**Consecuencia:** el peldaño 2 (implementar MCP a mano) es más caro de lo que lo tasó el plan. No
-bastaría con `initialize` + `tools/list` + `tools/call`: habría que reproducir métodos propios del
-cliente que no están en ninguna especificación pública y que pueden cambiar sin aviso. Refuerza el
-peldaño 1 más que cualquier criterio en verde.
-
-**Cuestión abierta, no resuelta:** por qué no aparece `initialize`. Dos explicaciones posibles y no
-se pueden distinguir con los datos actuales: o Claude Code usa un saludo propio, o la instrumentación
-no captura ese camino. El instrumento *sí* captura `initialize` en pruebas manuales por stdin, lo que
-apunta a la primera, pero apuntar no es saber. Resolver en el Tier 0.
+**PoC #1 cerrado del todo.** Siguiente: PoC #2.
 
 ### Lección para el Tier 0, a registrar en el TechSpec
 
@@ -80,17 +68,44 @@ Sin corregirlos, el veredicto habría sido *«el SDK oficial no sirve»* y se ha
 lenguaje sobre una premisa falsa. **Conclusión operativa: en el Tier 0, quien escribe el código no
 puede ser quien lo verifica.**
 
-## Lote 4 — lo que falta hacer
+## PoC #2 — Paquete NuGet de metadatos de la API de Revit — EN EJECUCIÓN AHORA MISMO
 
-1. `@architect` — escribir el veredicto en la carpeta del PoC.
-2. `@architect` — TechSpec: sustituir los `TBD` del SDK por `ModelContextProtocol` 2.2.0, cerrar el
-   Discovery bloqueante, registrar la escalera de 3 peldaños en ADR-001.
-3. `@architect` — roadmap: marcar los criterios del PoC #1 para que el Gate Fase 0 sea evaluable.
-   Y enmendar FR-011 y FR-012 del `requirements.md` con la escalera (sustituyen al «suspenso = Node»).
-4. `@judge` — revisar que ningún criterio se declare cumplido sin evidencia confirmada por el usuario.
+**Estado del pipeline de specs**: `requirements.md` generado y con sus 6 gaps ya cerrados vía
+`/aisy.clarify-feature` (decisiones: reconocimiento previo del paquete como el Lote 1 del PoC #1;
+CI en GitHub Actions; evidencia de equivalencia = confirmación manual anotada por el usuario en
+Revit vivo; tests del addin trivial se crean en este PoC, no existen previos; falta de cobertura de
+ensamblados extra no bloquea el veredicto). `plan.md` generado vía `/aisy.plan-feature` con **5
+Lotes, 16 tareas** (ver tabla de agentes más abajo). Ninguna tarea del plan lleva tag `@human`, pero
+las tareas del Lote 4 (verificación en Revit vivo) requieren que **el usuario** ejecute a mano el
+`GUION-VERIFICACION.md` que preparará `@tester` — hasta que eso pase, esa tarea se bloqueará sola en
+el loop de `/aisy.implement-feature` (comportamiento esperado, no es un fallo).
 
-Después: PR de `feature/001-poc-sdk-mcp-net` contra `dev`, y **PoC #2** (paquete NuGet de metadatos
-de la API de Revit, issue #2) que sigue sin especificar. El Gate Fase 0 exige los dos PoCs cerrados.
+**Ejecución (`/aisy.implement-feature`) en marcha**:
+
+- Worktree: `D:\Arquitectura\W_TRABAJOS\12_IA_OPT\2605_PROMPT_TO_REVIT\.worktrees\002-poc-2-paquete-nuget-metadatos-api-revit`
+- Rama: `feature/002-poc-2-paquete-nuget-metadatos-api-revit` (creada desde `dev`, commit `088db80`)
+- Modo: secuencial, plan único (no hubo que preguntar paralelo/secuencial)
+- **Última tarea disparada**: Lote 1, tarea 1 ("Identificar el paquete NuGet candidato"), agente
+  `@architect` en background, **sin resultado recibido todavía en la sesión que escribió esto**. Si
+  retomas y no ha llegado notificación, hay que asumir que el agente se perdió con el cierre de sesión
+  y **relanzarlo desde cero** (no hay forma de reconectar a un agente en background de una sesión ya
+  cerrada). El prompt exacto que se le dio está en el propio `plan.md`, tarea 1 del Lote 1 — basta con
+  volver a montar el mismo prompt (task + batch + contexto del plan + working directory = la ruta del
+  worktree de arriba) y volver a lanzarlo.
+- **`plan.md` sigue con las 16 tareas en `- [ ]`**: no se ha marcado ninguna todavía porque la tarea 1
+  no había terminado. No hay commits en la rama del worktree.
+- Progreso real: **0/16 tareas confirmadas completas.**
+
+**Cómo retomar**: entra en el repo (no hace falta `cd` al worktree para orquestar, el propio
+`/aisy.implement-feature` ya sabe trabajar contra la ruta del worktree), invoca de nuevo
+`/aisy.implement-feature`, selecciona el plan de PoC #2 (ya tiene el worktree y la rama creados —
+la skill debería detectarlos y reusarlos; si `git worktree add` falla porque ya existen, es la razón,
+no un error real) y sigue el loop de tareas desde la 1.
+
+## Otro trabajo pendiente
+
+1. Decidir con el usuario si procede PR de `dev` contra `main` para el PoC #1 (ya cerrado), o si se
+   espera a tener también el PoC #2 cerrado antes de tocar `main`.
 
 ## Deuda y cabos sueltos
 

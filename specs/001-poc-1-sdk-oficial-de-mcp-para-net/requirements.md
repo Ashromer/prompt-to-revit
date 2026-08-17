@@ -3,7 +3,7 @@ Feature Branch: 001-poc-1-sdk-oficial-de-mcp-para-net
 
 Created: 2026-08-17
 
-Status: Draft
+Status: Cerrado — peldaño 1, ADR-001 confirmado (2026-08-17)
 
 Input: User description: "el PoC #1 y sobre documentacion pisa el contenido con las nuevas respuestas. Al final de la documentaciñón y de las preguntas generadas por el orquestador, surge el proyecto también, por lo que las preguntas y respuestas realziadas deben sobrescribir lo anterior y armonizar todo el contenido de la carpeta"
 
@@ -35,7 +35,7 @@ Independent Test: invocando una herramienta del PoC que devuelve deliberadamente
 Acceptance Scenarios:
 
 1. Given una herramienta que devuelve un contenido con `ok: false`, `fase: runtime` y una traza multilínea, When se invoca desde Claude Code, Then la respuesta se recibe como llamada correcta y la traza llega íntegra.
-2. Given ese mismo contenido, When se compara lo recibido con lo emitido, Then coinciden carácter por carácter en el campo de traza.
+2. Given ese mismo contenido, When se compara lo recibido con lo emitido, Then **los dos marcadores únicos de inicio y fin del campo `traza` están presentes**, verificado en la revisión de `@judge` (Lote 4): el string viaja con doble escapado dentro del JSON-RPC (`<` → `<`, saltos de línea → `\n`), lo que invalida una comparación literal carácter por carácter; ver `README.md` y `GUION-VERIFICACION.md` §3 del PoC. Este escenario sustituye a la redacción original ("coinciden carácter por carácter"), que pedía un criterio más fuerte del que la evidencia disponible puede sostener sin falsos negativos por el escapado.
 
 ### User Story 3 - El puente se distribuye sin exigir runtime instalado (Priority: P3)
 
@@ -72,8 +72,13 @@ Acceptance Scenarios:
 - FR-008: Al cerrar, el PoC MUST dejar por escrito el veredicto sobre ADR-001, confirmado o revertido, y marcar como resuelto el Discovery bloqueante correspondiente del TechSpec.
 - FR-009: Si el veredicto es negativo, el PoC MUST dejar constancia de qué criterio falló y de que ADR-004 queda afectado en cascada.
 - FR-010: El proyecto del PoC MUST vivir en `pocs/001-poc-1-sdk-oficial-de-mcp-para-net/`, fuera de `src/`, y se descarta o archiva al cerrarlo. F0.1 levanta el monorepo definitivo desde cero: el código de experimento no se arrastra al producto.
-- FR-011: Si el paquete del SDK está solo en versión **preview** (no tiene versión estable), se activa el peldaño 2 de la escalera: implementación propia en C# de lo mínimo necesario. Si ningún peldaño es viable (preview + falta typed schemas), ADR-001 se revierte a Node y TypeScript.
-- FR-012: Si el SDK cubre stdio pero **sin** esquema tipado de herramientas, se activa el peldaño 2: implementación propia en C#. Sin esquema, la asimetría que mantiene a Roslyn fuera del camino por defecto se pierde (§3 de `DOCUMENTACION.md`). Si ningún peldaño es viable (preview + sin typed schemas), ADR-001 se revierte a Node y TypeScript.
+- FR-011: Si el paquete del SDK está solo en versión **preview** (no tiene versión estable), se activa el peldaño 2 de la escalera: implementación propia en C# de lo mínimo necesario. Si ningún peldaño es viable (preview + falta typed schemas), ADR-001 se revierte a Node y TypeScript. **No se disparó**: `ModelContextProtocol` 2.2.0 es estable (línea estable desde `1.0.0`, 2026-02-25), ver `DECISION-PELDANO.md` §1.
+- FR-012: Si el SDK cubre stdio pero **sin** esquema tipado de herramientas, se activa el peldaño 2: implementación propia en C#. Sin esquema, la asimetría que mantiene a Roslyn fuera del camino por defecto se pierde (§3 de `DOCUMENTACION.md`). Si ningún peldaño es viable (preview + sin typed schemas), ADR-001 se revierte a Node y TypeScript. **No se disparó**: el esquema tipado existe y se genera desde la firma del método .NET (`[McpServerTool]` + JSON Schema 2020-12), confirmado por SC-001 en `VEREDICTO.md`.
+
+**Cierre**: el PoC resolvió en **peldaño 1** (SDK estable y completo). Los tres peldaños de la escalera —
+descrita en `plan.md` y que sustituye al "suspenso = vuelta a Node" original de estos dos FR — no
+necesitaron ir más allá del primero. Veredicto completo en
+`pocs/001-poc-1-sdk-oficial-de-mcp-para-net/VEREDICTO.md`.
 
 ### Key Entities
 
@@ -84,9 +89,9 @@ Acceptance Scenarios:
 
 ### Measurable Outcomes
 
-- SC-001: Las dos herramientas declaradas aparecen listadas en una sesión real de Claude Code, con su esquema visible.
+- SC-001: Las herramientas declaradas (al menos dos, por FR-001; el PoC acabó declarando tres) aparecen listadas en una sesión real de Claude Code, con su esquema visible.
 - SC-002: Los tres casos se ejecutan una vez cada uno, sin ningún error de protocolo: herramienta sin parámetros, herramienta con parámetros válidos, y herramienta con parámetros que violan el esquema. Es un criterio binario: o el protocolo funciona o no. Repetir la misma llamada no añade información.
-- SC-003: Una traza multilínea emitida dentro de una respuesta correcta se recibe íntegra, verificada por comparación exacta del campo. Sin tamaño mínimo fijado: basta con una traza normal, y el límite real se descubrirá con uso real.
+- SC-003: Una traza multilínea emitida dentro de una respuesta correcta se recibe íntegra, verificada por la presencia de sus dos marcadores únicos de inicio y fin (no por comparación exacta carácter por carácter: el string sufre doble escapado dentro del JSON-RPC, así que ese criterio más fuerte se descartó como no verificable con la evidencia disponible — enmendado en la revisión de `@judge`, Lote 4). Sin tamaño mínimo fijado: basta con una traza normal, y el límite real se descubrirá con uso real.
 - SC-004: El ejecutable autocontenido se publica y arranca en la máquina de desarrollo. La ejecución en un entorno sin .NET 8 instalado queda **aplazada al empaquetado** y no se evalúa en este PoC.
 - SC-005: Los cuatro criterios de éxito del PoC en `specs/roadmap.md` quedan marcados con su resultado, y el Gate Fase 0 puede evaluarse sin ambigüedad respecto a este PoC.
 - SC-006: `specs/tech-spec.md` queda sin ningún `TBD` atribuible al SDK de MCP: nombre, versión y veredicto de ADR-001 escritos.

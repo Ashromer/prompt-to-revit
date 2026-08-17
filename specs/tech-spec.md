@@ -24,7 +24,7 @@ Fuera del alcance de este documento: el empaquetado e instalador, el soporte de 
 | Runtime del addin | .NET | 8, target `net8.0-windows` | Impuesto por Revit 2026, que corre sobre .NET 8. No es una elección |
 | Runtime del puente | .NET | 8, target `net8.0` | Sin dependencia de Windows Forms ni WPF: el puente no tiene UI |
 | Host | Autodesk Revit | 2026, interfaz en inglés | Único target soportado |
-| Protocolo con Claude | SDK oficial de MCP para .NET | *TBD* | Resuelve el JSON-RPC sobre stdio, el handshake y la declaración de herramientas. Madurez a confirmar antes de comprometerse, ver Discovery |
+| Protocolo con Claude | `ModelContextProtocol` (SDK oficial de MCP para .NET) | 2.2.0 | Resuelve el JSON-RPC sobre stdio, el handshake y la declaración de herramientas con esquema tipado. Confirmado por PoC #1, ver ADR-001 |
 | Compilación dinámica | `Microsoft.CodeAnalysis.CSharp` | *TBD* | Roslyn directo, sin envoltorio. Control explícito del juego de referencias, del `Emit` sin ejecutar y del `AssemblyLoadContext` colectible. Ver ADR-003 |
 | Referencias de la API | Paquetes NuGet de metadatos de la API de Revit | *TBD*, nombre exacto por confirmar | `RevitAPI.dll` no es redistribuible. Referencias de solo metadatos permiten compilar y hacer CI sin Revit instalado. Ver ADR-008 |
 | Transporte entre procesos | `System.IO.Pipes`, named pipes | incluido en .NET 8 | Sin puerto abierto, sin token, ACL de usuario del sistema. Ver ADR-002 |
@@ -215,6 +215,21 @@ Lo que **no** se cubre automáticamente es el adaptador que toca la API de Revit
 
 xUnit, versión *TBD*. Sin objetivo numérico de cobertura: el criterio es que toda la lógica fuera del adaptador de la API tenga test, y que el adaptador no contenga lógica que merezca uno. Verificación mínima para cerrar cualquier tarea: `dotnet build` limpio en Debug y en Release.
 
+**Lección del PoC #1** (`pocs/001-poc-1-sdk-oficial-de-mcp-para-net/VEREDICTO.md`): de seis tareas de
+código del Lote 2, cuatro tenían un defecto que solo se veía ejecutando, y las cuatro eran el mismo
+patrón — algo correcto que parecía roto (un marcador de traza escapado por `System.Text.Json`, un
+recuento que dependía de un `Dispose()` que nunca se ejecutaba, un arranque en frío indistinguible de un
+servidor muerto, un guion de verificación que afirmaba algo que el propio log contradecía). Sin
+corregirlos, el veredicto habría sido negativo sobre una premisa falsa. **Principio operativo para
+Tier 0 en adelante: quien escribe el código no puede ser quien lo verifica** — de ahí que `tester` y
+`judge` sean agentes separados de quien implementa, y que las verificaciones en Revit vivo las confirme
+siempre el usuario. Además, un fallo del SDK, un fallo de registro del servidor en Claude Code y un
+fallo del propio código se manifiestan **idénticos desde fuera** ("la herramienta no aparece"); el
+procedimiento de triaje en tres pasos que los distingue (arranca el ejecutable a mano → confirma el
+registro con `claude mcp get`/`list` → aísla con `claude --debug=mcp`) está documentado en
+`pocs/001-poc-1-sdk-oficial-de-mcp-para-net/GUION-VERIFICACION.md` §5 y se reutiliza tal cual la
+primera vez que aparezca el mismo síntoma en Tier 0.
+
 ## 🔌 Deployment
 
 ```mermaid
@@ -261,7 +276,8 @@ La capa sin Revit se desarrolla y testea con Revit cerrado y sin registrar nada,
 Runtime:
 
 ```
-SDK oficial de MCP para .NET        TBD, nombre y versión por confirmar
+ModelContextProtocol                2.2.0
+Microsoft.Extensions.Hosting        8.0.0
 Microsoft.CodeAnalysis.CSharp       TBD
 Paquetes de metadatos API Revit     TBD, nombre exacto por confirmar, target 2026
 ```
@@ -272,23 +288,39 @@ Dev:
 xUnit                               TBD
 ```
 
-Ninguna versión está fijada porque no existe todavía ningún `.csproj`. Se rellenan al crear los manifiestos y nunca antes.
+`ModelContextProtocol` y `Microsoft.Extensions.Hosting` quedan fijadas por el PoC #1 (ver
+`pocs/001-poc-1-sdk-oficial-de-mcp-para-net/DECISION-PELDANO.md` §4 y `VEREDICTO.md`); el `.csproj` de
+`RevitBridge.Mcp` debe fijar exactamente esas versiones, sin rango flotante. El resto no está fijado
+porque no existe todavía ningún `.csproj`: se rellenan al crear los manifiestos y nunca antes.
 
 ## 📐 ADRs
 
-### ADR-001: C# en todo el proyecto, Node y TypeScript descartados
+### ADR-001: C# en todo el proyecto, Node y TypeScript descartados — CONFIRMADO por PoC #1
 
-**Decisión**: el proceso puente que habla MCP se escribe en C# sobre .NET 8 con el SDK oficial de MCP para .NET, no en Node con TypeScript.
+**Decisión**: el proceso puente que habla MCP se escribe en C# sobre .NET 8 con el paquete
+`ModelContextProtocol` **2.2.0** (SDK oficial de MCP para .NET), no en Node con TypeScript.
 
 **Context**: `DOCUMENTACION.md` §2 fijaba Node/TypeScript, que es donde está el ecosistema de ejemplos y donde antes llegan las novedades del protocolo. Se consideró también implementar el protocolo a mano sin SDK. El autor domina C# y no Node, y la herramienta se quiere distribuible: exigir Node instalado en cada máquina destino es fricción real. Poner MCP en C# no elimina el segundo proceso, solo el segundo lenguaje, porque Claude Code arranca los servidores MCP como subproceso por stdio y el addin vive dentro de Revit.
+
+**Verificado por PoC #1** (`pocs/001-poc-1-sdk-oficial-de-mcp-para-net/VEREDICTO.md`, 2026-08-17):
+**peldaño 1 de la escalera de 3** (SDK estable y completo). `ModelContextProtocol` 2.2.0 es estable
+(línea estable desde `1.0.0`, 2026-02-25) y cubre stdio + declaración de herramientas con esquema
+tipado. Confirmado empíricamente en una sesión real de Claude Code: las herramientas aparecen con su
+esquema (SC-001), los tres casos de invocación funcionan sin error de protocolo, incluido el rechazo
+diagnosticable de un parámetro que viola el esquema (SC-002), y una traza multilínea dentro de una
+respuesta correcta llega íntegra, verificada por sus dos marcadores (SC-003). El ejecutable
+autocontenido `win-x64` publica y arranca en la máquina de desarrollo. La escalera de 3 peldaños de
+`specs/001-poc-1-sdk-oficial-de-mcp-para-net/plan.md` sustituye al "suspenso = Node" original de este
+ADR: solo se cae a Node si **ni el SDK ni una implementación propia** logran que Claude Code hable con
+el servidor, y ese no fue el caso.
 
 **Consequences**:
 - (+) Un solo lenguaje, un solo `dotnet build`, un solo conjunto de convenciones
 - (+) El puente se publica como `.exe` autocontenido: quien lo instale no necesita Node
 - (+) El contrato de mensajes se comparte como código compilado en `Core`, no como esquema duplicado
 - (-) Menos ejemplos y menos recorrido que el SDK de TypeScript
-- (-) Riesgo de madurez del SDK de .NET, sin verificar todavía
-- Mitigación: confirmar el SDK con un PoC mínimo antes de construir sobre él, ver [[roadmap]]
+- (+) ~~Riesgo de madurez del SDK de .NET, sin verificar todavía~~ Verificado por PoC #1: SDK maduro, estable desde hace ~6 meses en la fecha del PoC
+- La instrumentación del PoC reveló un hallazgo que no cambia el veredicto pero sí una expectativa: Claude Code invoca, además de `initialize`/`tools/list`/`tools/call` (estándar), los métodos `server/discover` y `subscriptions/listen`, que no están en ninguna especificación pública. Si algún día se activara el peldaño 2 (implementación propia), habría que soportarlos también. Ver `VEREDICTO.md` §3
 
 ### ADR-002: Named pipes en lugar de HTTP en loopback
 
@@ -423,7 +455,7 @@ Lo que decide es un riesgo específico de Revit: **todos los addins comparten Ap
 - [x] ~~¿Cómo se testea algo que no puede ejecutar Revit?~~ → **Costura de abstracción y xUnit** sobre todo lo que no toca la API
 - [x] ~~¿Cómo se referencia una API no redistribuible?~~ → **Paquetes NuGet de metadatos**. Ver ADR-008
 - [x] ~~¿Qué pasa si la aprobación queda desatendida?~~ → **Rechazo automático al caducar**. Ver ADR-009
-- [ ] ¿El SDK oficial de MCP para .NET está lo bastante maduro? Nombre exacto del paquete, versión y si cubre el transporte stdio y la declaración de herramientas que hacen falta. **Bloquea ADR-001** y debería resolverse con un PoC antes de construir encima
+- [x] ~~¿El SDK oficial de MCP para .NET está lo bastante maduro?~~ → **Sí. `ModelContextProtocol` 2.2.0, estable, stdio + esquema tipado confirmados.** Ver ADR-001 y `pocs/001-poc-1-sdk-oficial-de-mcp-para-net/VEREDICTO.md`
 - [ ] ¿Qué paquete de metadatos de la API de Revit se usa, en qué versión, y cubre 2026 completo? **Bloquea ADR-008** y el CI
 - [ ] ¿`/rollback` cubre también deshacer modificaciones de elementos preexistentes? Exige capturar el valor anterior de cada parámetro antes de escribirlo
 - [ ] ¿Cuál es el umbral concreto para que un snippet gradúe a comando? Repetición, estabilidad y coste son las señales; el corte está sin fijar

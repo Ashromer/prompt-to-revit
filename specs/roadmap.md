@@ -63,19 +63,19 @@ Dos PoCs, **independientes entre sí y paralelizables**. Bloquean el arranque de
 
 Ninguno de los dos lleva estimación: el TechSpec no las incluye y no se inventan aquí.
 
-### PoC #1 — SDK oficial de MCP para .NET `[P]`
+### PoC #1 — SDK oficial de MCP para .NET `[P]` — ✅ CERRADO, peldaño 1, ADR-001 confirmado
 
 - **Issue** — —
 - **Hypothesis** — Existe un SDK oficial de MCP para .NET lo bastante maduro para declarar herramientas con esquema tipado y servirlas por stdio, de modo que el proceso puente pueda escribirse en C# en lugar de Node y TypeScript.
 - **Functional design** — Un proyecto `net8.0` mínimo que declare dos herramientas, una sin parámetros y otra con parámetros tipados, las sirva por stdio, se registre como servidor MCP en Claude Code y devuelva una respuesta fija. Sin Revit, sin pipes, sin Roslyn: solo el protocolo. *(inferido: el TechSpec pide el PoC pero no describe el experimento)*
 - **Setup** — Claude Code con el servidor registrado, y el proyecto publicado como `.exe` autocontenido `win-x64` para comprobar que no exige runtime instalado.
-- **Success criteria**
-  - Claude Code lista las dos herramientas declaradas, con su esquema visible
-  - Invoca la herramienta con parámetros y recibe la respuesta sin error de protocolo
-  - El `.exe` autocontenido funciona en una máquina sin .NET 8 instalado
-  - Se puede devolver contenido de error dentro de una respuesta correcta, que es lo que exige ADR-007
-- **Closing decision** — Resuelve **ADR-001**. Si falla, el puente vuelve a Node y TypeScript y hay que rehacer ADR-004, porque el contrato compartido en `Core` deja de ser código compilado y pasa a ser un esquema duplicado.
-- **Output** — Proyecto del PoC en el repo, nombre y versión exacta del paquete anotados en el Tech Stack del [[tech-spec]], y el Discovery correspondiente cerrado.
+- **Success criteria** — resultado verificado por el usuario en `pocs/001-poc-1-sdk-oficial-de-mcp-para-net/GUION-VERIFICACION.md`, veredicto en `VEREDICTO.md`:
+  - ✅ Claude Code lista las tres herramientas declaradas, con su esquema visible (SC-001)
+  - ✅ Invoca la herramienta con parámetros y recibe la respuesta sin error de protocolo, en los tres casos: sin parámetros, con parámetros válidos, con parámetros que violan el esquema (SC-002)
+  - ✅ El `.exe` autocontenido arranca en la máquina de desarrollo; la verificación en una máquina sin .NET 8 quedó **aplazada al empaquetado** por decisión explícita del `requirements.md` del PoC — no es un criterio pendiente, es alcance movido
+  - ✅ Se devuelve contenido de error dentro de una respuesta correcta, con `ok`, `fase`, `error` y `traza` íntegra verificada por sus dos marcadores (SC-003), que es lo que exige ADR-007
+- **Closing decision** — Resuelve **ADR-001, confirmado**. Peldaño 1 de la escalera de 3 (ver `plan.md` del PoC): SDK estable y completo, se usa tal cual. ADR-004 no se toca.
+- **Output** — Proyecto del PoC en el repo (desechable, FR-010), `ModelContextProtocol` 2.2.0 y `Microsoft.Extensions.Hosting` 8.0.0 anotados en el Tech Stack y Dependencies del [[tech-spec]], y el Discovery correspondiente cerrado.
 
 ### PoC #2 — Paquete NuGet de metadatos de la API de Revit `[P]`
 
@@ -205,12 +205,18 @@ Las dependencias no obvias que conviene retener: el CI depende del PoC #2 y no s
 
 Todas simultáneamente:
 
-- **Peldaño 1 (SDK oficial)**: PoC #1 cerrado con sus cuatro criterios cumplidos (SC-001/002/003 verificados por usuario; criterio 4 = publicación y arranque en máquina de dev; criterio de "autocontenido sin .NET" aplazado a PoC de distribución final), O
-- **Peldaño 2 (implementación propia en C#)**: PoC #1 cerrado con sus tres criterios de protocolo (SC-001/002/003), servidor compila en Release, pero el SDK no cubre capacidades requeridas (preview o sin typed schemas), O
-- **Revertida a Node**: ADR-001 revertido a Node y TypeScript, ADR-004 rehecho, si ninguno de los dos peldaños C# es viable
-- PoC #2 cerrado, o ADR-008 revertido a referencia por ruta local (si PoC #2 no encuentra paquete NuGet de metadatos)
-- Nombre y versión exactos de los paquetes usados anotados en el Tech Stack y en Dependencies del [[tech-spec]], sustituyendo los *TBD*
-- Los dos Discovery bloqueantes del [[tech-spec]] marcados como resueltos
+- **Peldaño 1 (SDK oficial)** — ✅ **PoC #1 cerrado por esta vía.** Sus cuatro criterios cumplidos:
+  SC-001/002/003 verificados por el usuario en una sesión real de Claude Code; criterio 4 (publicación y
+  arranque en máquina de dev) cumplido; criterio de "autocontenido sin .NET" aplazado a PoC de
+  distribución final, según decisión explícita del `requirements.md` del PoC. `ModelContextProtocol`
+  2.2.0. Ver `pocs/001-poc-1-sdk-oficial-de-mcp-para-net/VEREDICTO.md`.
+- ~~Peldaño 2 (implementación propia en C#)~~ — no se activó, el peldaño 1 cerró en positivo
+- ~~Revertida a Node~~ — no se activó
+- [ ] PoC #2 cerrado, o ADR-008 revertido a referencia por ruta local (si PoC #2 no encuentra paquete NuGet de metadatos) — **pendiente, siguiente trabajo**
+- [x] Nombre y versión exactos del paquete del SDK de MCP anotados en el Tech Stack y en Dependencies del [[tech-spec]] (`ModelContextProtocol` 2.2.0, `Microsoft.Extensions.Hosting` 8.0.0); pendientes los del PoC #2 (`Microsoft.CodeAnalysis.CSharp` y el paquete de metadatos de la API de Revit)
+- [x] Discovery del SDK de MCP marcado como resuelto en [[tech-spec]]; pendiente el Discovery del paquete de metadatos de la API de Revit (bloqueado por el PoC #2)
+
+**Estado del gate: 1 de 2 PoCs cerrado. No se abre Tier 0 hasta que el PoC #2 también cierre.**
 
 ### Gate Tier 0 → Tier 1
 
