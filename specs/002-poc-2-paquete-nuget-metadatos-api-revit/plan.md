@@ -158,22 +158,34 @@ confirmación está mintiendo.
 
 ## Lote 3 — Verificación sin Revit (depende del Lote 2, la ejecuta @tester)
 
-- [ ] @tester · Confirmar el build local del proyecto NuGet como humo rápido: ejecutar
+- [x] @tester · Confirmar el build local del proyecto NuGet como humo rápido: ejecutar
   `dotnet build -c Debug` y `dotnet build -c Release` sobre `PocRevitAddin.Nuget.csproj` en esta
   máquina y reportar limpio/no limpio. Dejar explícito en el reporte que **esto no demuestra por sí
   solo Historia 1** (esta máquina tiene Revit instalado), es solo el primer filtro antes de gastar un
   run de CI.
-- [ ] @tester · Disparar el workflow y confirmar en verde: lanzar el workflow de GitHub Actions (push
+  **Resultado**: ya ejecutado por el orquestador en el Lote 2 (0 errores, Debug y Release). Filtro
+  pasado; no sustituye a la tarea siguiente.
+- [x] @tester · Disparar el workflow y confirmar en verde: lanzar el workflow de GitHub Actions (push
   o `workflow_dispatch`, según quede disponible) y confirmar que el job compila
   `PocRevitAddin.Nuget.csproj` en Debug y en Release sin errores, y que `dotnet test` sobre
   `PocRevitAddin.Tests.csproj` pasa, todo en un runner `windows-latest` sin Revit instalado (SC-001,
   SC-004; Historia 1 y Historia 3). Adjuntar el enlace o el log del run como evidencia. Si el job
   falla, diagnosticar si el fallo es del paquete NuGet elegido (ensamblados que faltan, tipos que no
   resuelven) o del propio workflow, y reportarlo con esa distinción antes de tocar nada del Lote 1.
-- [ ] @tester · Inspeccionar los ensamblados expuestos por el paquete: a partir del build en verde,
+  **Resultado**: rama publicada (`git push -u origin feature/002-poc-2-paquete-nuget-metadatos-api-revit`),
+  workflow disparado por el propio push. **Verde, `conclusion: success`, 1m22s.** Los tres pasos
+  (Debug, Release, test) en ✓. Evidencia:
+  https://github.com/Ashromer/prompt-to-revit/actions/runs/32069521493 — SC-001, SC-004, Historia 1 y
+  Historia 3 **cumplidas con prueba real de un runner sin Revit instalado**, no solo la máquina de
+  desarrollo. Únicos avisos: `CS8600` (nullable, ya conocidos) y deprecación de Node 20 en las actions
+  (irrelevante, no bloquea).
+- [x] @tester · Inspeccionar los ensamblados expuestos por el paquete: a partir del build en verde,
   confirmar explícitamente que el paquete NuGet elegido expone, como mínimo, `RevitAPI` y `RevitAPIUI`
   (SC-003) — listando las referencias resueltas del proyecto (`dotnet list package` o inspección del
   `.deps.json`/`obj` tras el build) y no solo asumiéndolo del README del paquete.
+  **Resultado**: `dotnet list package` sobre `PocRevitAddin.Nuget.csproj` confirma
+  `Nice3point.Revit.Api.RevitAPI [2026.4.10]` y `Nice3point.Revit.Api.RevitAPIUI [2026.4.10]`
+  resueltos como referencias directas. SC-003 cumplido con inspección real, no asumido del README.
 
 ---
 
