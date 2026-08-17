@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>PocMcpSdk</RootNamespace>
+    <AssemblyName>PocMcpSdk</AssemblyName>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Versión exacta fijada por pocs/001-poc-1-sdk-oficial-de-mcp-para-net/DECISION-PELDANO.md §4. No usar rango flotante. -->
+    <PackageReference Include="ModelContextProtocol" Version="2.2.0" />
+    <!-- Última 8.0.x disponible sin verificar por dotnet restore en esta tarea (no hay Bash en esta sesión); ver informe. -->
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.0" />
+  </ItemGroup>
+
+</Project>
