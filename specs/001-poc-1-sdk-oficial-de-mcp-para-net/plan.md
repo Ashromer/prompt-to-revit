@@ -48,7 +48,7 @@ criterios como cumplidos sin que el usuario lo haya confirmado está mintiendo.
 
 ## Lote 3 — Verificación (depende del Lote 2, la ejecuta el usuario)
 
-- [ ] @tester · Preparar el guion de verificación: escribir la secuencia exacta de comprobaciones que el usuario debe ejecutar en su sesión de Claude Code, con el resultado esperado de cada una y un hueco para anotar el observado. Cubre SC-001 (las herramientas aparecen con su esquema), SC-002 (los tres casos: sin parámetros, con parámetros válidos, con parámetros que violan el esquema) y SC-003 (la traza llega íntegra, verificada por los marcadores de inicio y fin).
+- [x] @tester · Preparar el guion de verificación: escribir la secuencia exacta de comprobaciones que el usuario debe ejecutar en su sesión de Claude Code, con el resultado esperado de cada una y un hueco para anotar el observado. Cubre SC-001 (las herramientas aparecen con su esquema), SC-002 (los tres casos: sin parámetros, con parámetros válidos, con parámetros que violan el esquema) y SC-003 (la traza llega íntegra, verificada por los marcadores de inicio y fin).
 - [ ] @tester · Recoger y diagnosticar los resultados: a partir de lo que el usuario anote, reportar qué criterios se cumplieron y cuáles no, con la evidencia real. Para cada fallo, distinguir si es del SDK, del registro del servidor en Claude Code, o del propio PoC — los tres se manifiestan igual desde fuera y esa distinción es la Edge Case abierta que volverá a aparecer en el Tier 0. Anotar cómo se distinguió.
 
 ---
