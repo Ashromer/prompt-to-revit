@@ -113,8 +113,8 @@ Local — no tiene sentido comparar contra un Local "bueno" si el NuGet ya fall�
 
 ## 2. Build Local — Acceptance Scenario 3, y observación del panel duplicado
 
-**Sí, cierra Revit ahora** para poder copiar el `.dll` del build Local (A2.1) — el objetivo de
-este bloque es que **ambos addins queden cargados juntos en el arranque siguiente**, para poder
+**Cierra Revit ahora** para poder copiar el `.dll` del build Local (A2.1) — el objetivo de este
+bloque es que **ambos addins queden cargados juntos en el arranque siguiente**, para poder
 comparar los dos botones en la misma sesión y, de paso, observar cómo se comporta el ribbon con
 dos addins que registran un panel con el mismo nombre desde dos ensamblados distintos (pregunta
 abierta señalada por `revit-developer`, sin verificar hasta ahora).
@@ -132,7 +132,37 @@ Copy-Item "$BASE\PocRevitAddin.Local\PocRevitAddin.Local.addin" "$env:APPDATA\Au
 Resultado esperado: ahora `%APPDATA%\Autodesk\Revit\Addins\2026\` contiene **los dos** juegos de
 ficheros (`PocRevitAddin.Nuget.*` y `PocRevitAddin.Local.*`) a la vez.
 
-`Observado:` ______________________________________________
+`Observado:` Correcto
+
+> **HALLAZGO real de esta verificación (no un fallo del PoC, un defecto del propio guion):**
+> los dos addins registran un panel con el **mismo nombre** (`"PoC #2 NuGet vs Local"`) desde
+> ensamblados distintos. Revit **no lo permite**: el segundo `OnStartup` que se ejecuta revienta
+> con `Autodesk.Revit.Exceptions.ArgumentException: The panel with name PoC #2 NuGet vs Local
+> already exists!`, sin llegar a mostrar su botón (visto en captura del usuario en A2.2). La
+> suposición de `revit-developer` de que "deberían convivir como dos paneles separados" (uno por
+> ensamblado) era **incorrecta**: el nombre de panel es único por pestaña, no por addin. Responde
+> a la observación abierta A2.3 — el resultado es el caso (c) ("cualquier otro comportamiento"), y
+> ya no hace falta seguir A2.2-A2.5 tal como estaban escritas: van directas al bloque de abajo.
+>
+> **Esto NO activa FR-009.** No es el paquete NuGet fallando frente al runtime de Revit por
+> desajuste de versión (el edge case real de `requirements.md`): es un choque de nombres entre
+> dos addins de prueba cargados a la vez, algo que Historia 2 no exige (pide repetir el mismo
+> procedimiento de carga, no cargar los dos simultáneamente). Se prueba el build Local **solo**,
+> con el NuGet momentáneamente fuera de la carpeta de Addins:
+>
+> ```powershell
+> # Cierra Revit primero si sigue abierto tras el diálogo de error
+> Move-Item "$env:APPDATA\Autodesk\Revit\Addins\2026\PocRevitAddin.Nuget.addin" "$BASE\PocRevitAddin.Nuget.addin.bak" -Force
+> ```
+>
+> Con eso el `.dll`/`.pdb` del NuGet quedan en la carpeta pero Revit ya no lo registra (solo lee
+> `.addin`), así que solo carga `PocRevitAddin.Local`. Reabre Revit y sigue en A2.4/A2.5 de abajo
+> con el botón Local, sin el choque de paneles. Al terminar, antes de la sección 3, restaura el
+> `.addin` del NuGet:
+>
+> ```powershell
+> Move-Item "$BASE\PocRevitAddin.Nuget.addin.bak" "$env:APPDATA\Autodesk\Revit\Addins\2026\PocRevitAddin.Nuget.addin" -Force
+> ```
 
 **A2.2 — Reabrir Revit 2026.**
 
@@ -142,7 +172,14 @@ sección 1), ve a la sección 4 — ese es exactamente el caso interesante para 
 aquí sería al revés de lo esperado (el Local es la referencia de comparación y en teoría no
 debería fallar nunca por versión de metadatos, solo por otras causas del entorno).
 
-`Observado:` ______________________________________________
+`Observado:` Diálogo "Herramientas externas - Fallo de herramienta externa": *"Revit no puede
+ejecutar aplicación externa 'PocRevitAddin.Nuget'. Solicite asistencia a su proveedor. Información
+proporcionada a Revit sobre su identidad: PoC #2 - build contra paquete NuGet de metadatos
+(Nice3point.Revit.Api)."* — `Autodesk.Revit.Exceptions.ArgumentException: The panel with name PoC
+#2 NuGet vs Local already exists! Parameter name: newPanelName`, traza en
+`PocRevitAddin.App.OnStartup(UIControlledApplication application)`. Capturado en pantalla por el
+usuario. Ver el bloque HALLAZGO arriba (A2.1): no es fallo del PoC, es el choque de nombre de
+panel entre los dos addins cargados a la vez.
 
 **A2.3 — Observación dedicada: ¿un panel o dos?** Antes de mirar el botón Local en concreto,
 fíjate en la zona del ribbon donde apareció el panel en la sección 1.
@@ -157,7 +194,11 @@ es una pregunta abierta, cualquiera de los tres es información válida):
   forma inesperada, aparece un error nuevo que no salió en la sección 1, etc.) — descríbelo tal
   cual, con captura si es posible.
 
-`Observado:` ______________________________________________
+`Observado:` (c) — ninguno de los dos paneles llega a convivir: el segundo addin en cargar
+(`PocRevitAddin.Nuget`, según el mensaje de A2.2) revienta al intentar crear un panel con el mismo
+nombre que ya existía. Pendiente de completar A2.4/A2.5 sobre el build Local en solitario (ver
+procedimiento de aislamiento en el bloque HALLAZGO, A2.1) — **no ejecutado todavía, sesión
+pausada aquí.**
 
 **A2.4 — Confirmar el botón Local: ribbon** (mismo criterio que A1.3, ahora sobre el botón
 `PoC #2` / `PocRevitAddin.Local`, dondequiera que haya aparecido según A2.3).
