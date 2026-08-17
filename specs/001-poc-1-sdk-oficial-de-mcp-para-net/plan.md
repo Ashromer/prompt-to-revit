@@ -30,8 +30,8 @@ criterios como cumplidos sin que el usuario lo haya confirmado está mintiendo.
 
 ## Lote 1 — Reconocimiento (bloquea todo lo demás)
 
-- [ ] @architect · Verificar el paquete del SDK: confirmar si existe el paquete `ModelContextProtocol` (repositorio `modelcontextprotocol/csharp-sdk`), su identificador exacto en NuGet, su versión más reciente, y si esa versión es estable o preview. Anotar fecha de último release y actividad del repositorio. Si no existe ningún SDK oficial de MCP para .NET, cerrar el PoC en negativo aquí mismo y saltar al Lote 4.
-- [ ] @architect · Determinar el peldaño de la escalera: a partir de la verificación anterior y de la documentación del SDK, decidir si el paquete cubre transporte stdio Y declaración de herramientas con esquema tipado. Estable y completo → peldaño 1, se continúa con el SDK. Preview o sin esquema → peldaño 2, se continúa con implementación propia. Dejar la decisión por escrito con su razón antes de escribir una línea de código.
+- [x] @architect · Verificar el paquete del SDK: confirmar si existe el paquete `ModelContextProtocol` (repositorio `modelcontextprotocol/csharp-sdk`), su identificador exacto en NuGet, su versión más reciente, y si esa versión es estable o preview. Anotar fecha de último release y actividad del repositorio. Si no existe ningún SDK oficial de MCP para .NET, cerrar el PoC en negativo aquí mismo y saltar al Lote 4. **Resultado**: `ModelContextProtocol` 2.2.0, estable, repositorio activo (push 2026-08-13). Verificado en `RECONOCIMIENTO.md`.
+- [x] @architect · Determinar el peldaño de la escalera: a partir de la verificación anterior y de la documentación del SDK, decidir si el paquete cubre transporte stdio Y declaración de herramientas con esquema tipado. Estable y completo → peldaño 1, se continúa con el SDK. Preview o sin esquema → peldaño 2, se continúa con implementación propia. Dejar la decisión por escrito con su razón antes de escribir una línea de código. **Resultado**: Peldaño 1. 2.2.0 es estable, stdio + typed schemas verificados en docs `/v2/` y samples del tag. Decisión documentada en `DECISION-PELDANO.md`.
 
 ---
 

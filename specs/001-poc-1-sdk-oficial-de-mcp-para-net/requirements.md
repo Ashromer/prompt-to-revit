@@ -52,8 +52,8 @@ Acceptance Scenarios:
 
 ## Edge Cases
 
-- **SDK con stdio pero sin esquema tipado**: resuelto, es suspenso (FR-012). No se acepta como resultado parcial.
-- **Paquete solo en preview**: resuelto, es suspenso (FR-011).
+- **SDK con stdio pero sin esquema tipado**: activa peldaño 2 (FR-012); si preview también, ambos fallan → revertir a Node.
+- **Paquete solo en preview**: activa peldaño 2 (FR-011); sin typed schemas, ambos peldaños fallan → revertir a Node.
 - ¿Cómo se distingue un fallo del SDK de un fallo de registro del servidor en Claude Code? Los dos se manifiestan igual desde fuera: la herramienta no aparece. El PoC debe dejar constancia de cómo lo distinguió, porque volverá a aparecer en el Tier 0.
 - **Truncado de contenidos por tamaño**: no se fija umbral en este PoC (SC-003). Si durante la prueba se observa un recorte, se anota el tamaño al que ocurre; si no se observa, no se investiga.
 - ¿Qué pasa si el ejecutable autocontenido arranca pero tarda mucho en responder al handshake? Un arranque lento puede leerse como servidor caído.
@@ -72,8 +72,8 @@ Acceptance Scenarios:
 - FR-008: Al cerrar, el PoC MUST dejar por escrito el veredicto sobre ADR-001, confirmado o revertido, y marcar como resuelto el Discovery bloqueante correspondiente del TechSpec.
 - FR-009: Si el veredicto es negativo, el PoC MUST dejar constancia de qué criterio falló y de que ADR-004 queda afectado en cascada.
 - FR-010: El proyecto del PoC MUST vivir en `pocs/001-poc-1-sdk-oficial-de-mcp-para-net/`, fuera de `src/`, y se descarta o archiva al cerrarlo. F0.1 levanta el monorepo definitivo desde cero: el código de experimento no se arrastra al producto.
-- FR-011: Si el paquete del SDK solo está disponible en versión **preview**, el PoC MUST cerrarse en **suspenso**. No se construye el proyecto entero sobre una API que puede cambiar bajo los pies; en ese caso gana el ecosistema maduro de TypeScript y ADR-001 se revierte.
-- FR-012: Si el SDK cubre el transporte stdio pero **no** la declaración de herramientas con esquema tipado, el PoC MUST cerrarse en **suspenso**. Sin esquema, los comandos compilados dejan de parecer la opción natural frente a la escotilla de Roslyn, y esa asimetría es el mecanismo que mantiene a Roslyn fuera del camino por defecto (§3 de `DOCUMENTACION.md`). No se acepta como resultado parcial.
+- FR-011: Si el paquete del SDK está solo en versión **preview** (no tiene versión estable), se activa el peldaño 2 de la escalera: implementación propia en C# de lo mínimo necesario. Si ningún peldaño es viable (preview + falta typed schemas), ADR-001 se revierte a Node y TypeScript.
+- FR-012: Si el SDK cubre stdio pero **sin** esquema tipado de herramientas, se activa el peldaño 2: implementación propia en C#. Sin esquema, la asimetría que mantiene a Roslyn fuera del camino por defecto se pierde (§3 de `DOCUMENTACION.md`). Si ningún peldaño es viable (preview + sin typed schemas), ADR-001 se revierte a Node y TypeScript.
 
 ### Key Entities
 

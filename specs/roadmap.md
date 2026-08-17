@@ -205,9 +205,11 @@ Las dependencias no obvias que conviene retener: el CI depende del PoC #2 y no s
 
 Todas simultáneamente:
 
-- PoC #1 cerrado con sus cuatro criterios cumplidos, o ADR-001 revertido a Node y TypeScript con ADR-004 rehecho en consecuencia
-- PoC #2 cerrado con sus cuatro criterios cumplidos, o ADR-008 revertido a referencia por ruta local, asumiendo que desaparece el CI
-- Nombre y versión exactos de ambos paquetes anotados en el Tech Stack y en Dependencies del [[tech-spec]], sustituyendo los *TBD*
+- **Peldaño 1 (SDK oficial)**: PoC #1 cerrado con sus cuatro criterios cumplidos (SC-001/002/003 verificados por usuario; criterio 4 = publicación y arranque en máquina de dev; criterio de "autocontenido sin .NET" aplazado a PoC de distribución final), O
+- **Peldaño 2 (implementación propia en C#)**: PoC #1 cerrado con sus tres criterios de protocolo (SC-001/002/003), servidor compila en Release, pero el SDK no cubre capacidades requeridas (preview o sin typed schemas), O
+- **Revertida a Node**: ADR-001 revertido a Node y TypeScript, ADR-004 rehecho, si ninguno de los dos peldaños C# es viable
+- PoC #2 cerrado, o ADR-008 revertido a referencia por ruta local (si PoC #2 no encuentra paquete NuGet de metadatos)
+- Nombre y versión exactos de los paquetes usados anotados en el Tech Stack y en Dependencies del [[tech-spec]], sustituyendo los *TBD*
 - Los dos Discovery bloqueantes del [[tech-spec]] marcados como resueltos
 
 ### Gate Tier 0 → Tier 1

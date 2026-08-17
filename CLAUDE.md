@@ -46,7 +46,7 @@ explícita de iteraciones.
 ## Entorno
 
 - Revit 2026 (**interfaz en inglés**), .NET 8 (`net8.0-windows`, `win-x64`)
-- `RevitAPI.dll` / `RevitAPIUI.dll` desde `C:\Program Files\Autodesk\Revit 2026\`, `CopyLocal=false`
+- `RevitAPI.dll` / `RevitAPIUI.dll` referenciadas por paquete NuGet de metadatos (ADR-008; paquete exacto por confirmar en PoC #2)
 - El DLL del addin queda bloqueado con Revit abierto → compilar con Revit cerrado
 - Registro en `%APPDATA%\Autodesk\Revit\Addins\2026\`; el `FullClassName` del `.addin` debe
   coincidir exactamente con `namespace.ClassName`
