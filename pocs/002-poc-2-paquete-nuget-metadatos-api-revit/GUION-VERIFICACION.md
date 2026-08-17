@@ -17,10 +17,12 @@ contra el paquete NuGet se comporte en Revit igual que el compilado contra las D
 
 ## 0. Preparación
 
-**P0 — Rutas de este worktree** (ajusta si verificas desde otro):
+**P0 — Rutas de este worktree** (ajusta si verificas desde otro). Ejecuta esto primero en tu
+PowerShell — define `$BASE` como variable real; los bloques de código de las secciones
+siguientes lo usan tal cual:
 
-```
-BASE = D:\Arquitectura\W_TRABAJOS\12_IA_OPT\2605_PROMPT_TO_REVIT\.worktrees\002-poc-2-paquete-nuget-metadatos-api-revit\pocs\002-poc-2-paquete-nuget-metadatos-api-revit
+```powershell
+$BASE = "D:\Arquitectura\W_TRABAJOS\12_IA_OPT\2605_PROMPT_TO_REVIT\.worktrees\002-poc-2-paquete-nuget-metadatos-api-revit\pocs\002-poc-2-paquete-nuget-metadatos-api-revit"
 ```
 
 - Build NuGet: `$BASE\PocRevitAddin.Nuget\bin\Release\net8.0-windows\PocRevitAddin.Nuget.dll`
