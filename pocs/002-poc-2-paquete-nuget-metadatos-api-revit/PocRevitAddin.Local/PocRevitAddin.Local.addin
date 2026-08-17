@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RevitAddIns>
+  <AddIn Type="Application">
+    <Name>PocRevitAddin.Local</Name>
+    <Assembly>PocRevitAddin.Local.dll</Assembly>
+    <AddInId>3d8e1a47-92c5-4f6b-b1a8-7e4c29d6f813</AddInId>
+    <FullClassName>PocRevitAddin.App</FullClassName>
+    <VendorId>PocRevitAddin</VendorId>
+    <VendorDescription>PoC #2 - build contra DLL locales de Revit 2026 (C:\Program Files\Autodesk\Revit 2026)</VendorDescription>
+  </AddIn>
+</RevitAddIns>

@@ -81,7 +81,7 @@ confirmación está mintiendo.
 
 ## Lote 2 — El experimento (depende del Lote 1)
 
-- [ ] @revit-developer · Crear el addin trivial compartido: en
+- [x] @revit-developer · Crear el addin trivial compartido: en
   `pocs/002-poc-2-paquete-nuget-metadatos-api-revit/`, fuera de la solución de `src/`, un
   `IExternalApplication` mínimo (`OnStartup`/`OnShutdown`) que añade un panel y un botón al ribbon, y
   un `IExternalCommand` de acción trivial que el botón ejecuta al pulsarlo (por ejemplo, un
@@ -89,20 +89,46 @@ confirmación está mintiendo.
   **mismo fichero físico** para las dos compilaciones de más abajo (vía `<Compile Include>` con ruta
   relativa compartida, no copia duplicada), para que la comparación de Historia 2 compare de verdad
   el método de referencia y no dos implementaciones distintas.
-- [ ] @revit-developer · Compilar contra el paquete NuGet: crear
+  **Resultado**: `pocs/002-poc-2-paquete-nuget-metadatos-api-revit/Shared/PocRevitAddin.cs` —
+  `PocRevitAddin.App : IExternalApplication` (panel + botón) y `PocRevitAddin.PocCommand :
+  IExternalCommand` (`TaskDialog.Show`). Diferenciación entre builds sin duplicar el fichero: el texto
+  del botón y del diálogo leen `Assembly.GetExecutingAssembly().GetName().Name` en tiempo de
+  ejecución, así que el `AssemblyName` que fije cada `.csproj` (tareas siguientes) se refleja solo. No
+  compilado todavía (no existen `.csproj` aún, es la siguiente tarea).
+- [x] @revit-developer · Compilar contra el paquete NuGet: crear
   `PocRevitAddin.Nuget.csproj` (`net8.0-windows`) que referencia únicamente el paquete y la versión
   exacta fijados en el Lote 1 (sin ruta local, sin `HintPath`), más su `.addin` de registro
   correspondiente. Debe compilar en Debug y en Release en esta misma máquina como primera comprobación
   rápida (sabiendo que aquí no demuestra "sin Revit", eso lo hace el Lote 3), y debe producir un DLL
   que se pueda copiar junto a su `.addin` a `%APPDATA%\Autodesk\Revit\Addins\2026\` (FR-003).
-- [ ] @revit-developer · Compilar contra las DLL locales, como término de comparación: crear
+  **Resultado**: `PocRevitAddin.Nuget/PocRevitAddin.Nuget.csproj` + `.addin` (GUID
+  `7f3a9c2e-4b61-4d8a-9e2f-1c6a8d5b3f47`, `FullClassName=PocRevitAddin.App`, `AssemblyName=
+  PocRevitAddin.Nuget`). El agente `@revit-developer` no tiene herramienta de shell en esta sesión
+  (limitación conocida del proyecto, ver `CLAUDE.md`/`ESTADO.md`: PowerShell, no Bash) y quedó
+  BLOCKED al no poder compilar; **el orquestador ejecutó la compilación**. `dotnet build -c Debug` y
+  `-c Release` limpios (0 errores, 2 warnings CS8600 de nullable, irrelevantes). **Riesgo de
+  `RECONOCIMIENTO.md` §13.1 falsado en positivo**: inspeccionado `bin\Debug\net8.0-windows\`, no
+  aparece `RevitAPI.dll`/`RevitAPIUI.dll`, solo el DLL propio del addin (5,6 KB) — confirma que el
+  paquete es "solo compilación" por empaquetado, la lectura (a) elegida por el usuario se sostiene
+  para este paquete concreto, no es solo inferencia ya.
+- [x] @revit-developer · Compilar contra las DLL locales, como término de comparación: crear
   `PocRevitAddin.Local.csproj` que referencia `RevitAPI.dll`/`RevitAPIUI.dll` por `HintPath` a
   `C:\Program Files\Autodesk\Revit 2026\`, con `Private=False`/`CopyLocal=False` como hace el resto de
   plugins del autor, más su propio `.addin` (FR-004). Compila en esta máquina, que sí tiene Revit
   instalado. Nombrar de forma que ambos DLL y `.addin` puedan convivir registrados a la vez sin
   colisionar (GUID de `.addin` distinto, `AssemblyName` distinto, texto del botón que identifique de
   cuál build viene, para poder distinguirlos a simple vista en el ribbon durante la verificación).
-- [ ] @test-developer · Crear la suite de tests mínima (FR-010): como no hay ninguna suite aplicable
+  **Resultado**: `PocRevitAddin.Local/PocRevitAddin.Local.csproj` + `.addin` (GUID
+  `3d8e1a47-92c5-4f6b-b1a8-7e4c29d6f813`, distinto del build NuGet; `AssemblyName=PocRevitAddin.Local`).
+  Compilado por el orquestador (mismo motivo que la tarea anterior): `dotnet build -c Debug` y
+  `-c Release` limpios, 0 errores, solo warnings `MSB3277` (conflictos de versión esperados en
+  ensamblados transitivos de Revit al referenciar por ruta local) y los mismos `CS8600` del fichero
+  compartido. Punto pendiente de verificar en Lote 4 (anotado por el propio agente, no verificable sin
+  Revit vivo): ambos `.addin` crean un panel con el mismo nombre `"PoC #2 NuGet vs Local"` desde el
+  mismo `Shared/PocRevitAddin.cs` — debería dar dos paneles separados (uno por ensamblado) al estar
+  registrados como addins distintos, pero es comportamiento de Revit en tiempo de ejecución, no
+  verificable por compilación.
+- [x] @test-developer · Crear la suite de tests mínima (FR-010): como no hay ninguna suite aplicable
   todavía y el addin trivial no tiene lógica de negocio real, extraer a una clase de C# puro, **sin
   ninguna referencia a `RevitAPI`/`RevitAPIUI`** (ni siquiera el paquete de metadatos: sus tipos son
   solo firmas, no ejecutables fuera de un proceso Revit real), un fragmento pequeño y honesto de lógica
@@ -111,13 +137,22 @@ confirmación está mintiendo.
   ni `PocRevitAddin.Nuget.csproj` ni `PocRevitAddin.Local.csproj` por su parte de API. Sin objetivo de
   cobertura: el único propósito es que el workflow de CI tenga algo real que ejecutar en un runner sin
   Revit (FR-010, Historia 3).
-- [ ] @code-developer · Crear el workflow de GitHub Actions: `.github/workflows/` (no existe ninguno
+  **Resultado**: `PocRevitAddin.Tests/` — `AddinMetadata.cs` (réplica deliberada, sin `Autodesk.*`, de
+  los literales de `Shared/PocRevitAddin.cs`: nombre de panel, texto de botón, tooltip, mensaje de
+  diálogo — verificado línea a línea por el orquestador que coincide exactamente con el fichero
+  compartido antes de compilar) + 3 tests xUnit. Sin `ProjectReference` a ninguno de los dos `.csproj`
+  del addin. Compilado y ejecutado por el orquestador: `dotnet test` → **3/3 en verde**, 121 ms.
+- [x] @code-developer · Crear el workflow de GitHub Actions: `.github/workflows/` (no existe ninguno
   todavía en el repo, se crea desde cero), disparable por `push` y por `workflow_dispatch`, en un
   runner `windows-latest` (no tiene Revit instalado, y el addin necesita `net8.0-windows`), que
   ejecute `dotnet build` en Debug y en Release sobre `PocRevitAddin.Nuget.csproj` (nunca sobre
   `PocRevitAddin.Local.csproj`, que exige Revit instalado y no tiene sentido en CI) y luego
   `dotnet test` sobre `PocRevitAddin.Tests.csproj` (FR-006). El job debe fallar si cualquiera de las
   dos configuraciones no compila limpio o si algún test falla.
+  **Resultado**: `.github/workflows/poc2-build.yml` — `push` + `workflow_dispatch`, `windows-latest`,
+  `actions/setup-dotnet@v4` (8.0.x), tres pasos (`build Debug`, `build Release`, `test`), sin
+  referenciar `PocRevitAddin.Local.csproj`. Revisado por el orquestador, correcto. Sin disparar
+  todavía (eso es Lote 3, requiere push/gh CLI).
 
 ---
 

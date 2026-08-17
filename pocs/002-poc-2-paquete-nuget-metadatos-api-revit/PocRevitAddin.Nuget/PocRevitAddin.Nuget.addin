@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RevitAddIns>
+  <AddIn Type="Application">
+    <Name>PocRevitAddin.Nuget</Name>
+    <Assembly>PocRevitAddin.Nuget.dll</Assembly>
+    <AddInId>7f3a9c2e-4b61-4d8a-9e2f-1c6a8d5b3f47</AddInId>
+    <FullClassName>PocRevitAddin.App</FullClassName>
+    <VendorId>PocRevitAddin</VendorId>
+    <VendorDescription>PoC #2 - build contra paquete NuGet de metadatos (Nice3point.Revit.Api)</VendorDescription>
+  </AddIn>
+</RevitAddIns>
