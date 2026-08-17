@@ -104,8 +104,7 @@ Build: PocRevitAddin.Nuget
 Ningún error, ninguna excepción no controlada de Revit, ningún cuelgue. Cierra el diálogo con
 Aceptar.
 
-`Observado:` ______________________________________________
-
+`Observado:` Hasta aqui desde A.1 Correcto todo
 Si A1.2, A1.3 o A1.4 no salen como se espera, anota el fallo tal cual (texto exacto del error,
 captura si hace falta) y ve a la sección 4 o 5 según corresponda antes de continuar con el build
 Local — no tiene sentido comparar contra un Local "bueno" si el NuGet ya falló de forma clara.
@@ -114,8 +113,9 @@ Local — no tiene sentido comparar contra un Local "bueno" si el NuGet ya fall�
 
 ## 2. Build Local — Acceptance Scenario 3, y observación del panel duplicado
 
-**No cierres Revit todavía.** Este bloque añade el segundo addin a la misma sesión para poder
-comparar ambos botones en el mismo arranque y, de paso, observar cómo se comporta el ribbon con
+**Sí, cierra Revit ahora** para poder copiar el `.dll` del build Local (A2.1) — el objetivo de
+este bloque es que **ambos addins queden cargados juntos en el arranque siguiente**, para poder
+comparar los dos botones en la misma sesión y, de paso, observar cómo se comporta el ribbon con
 dos addins que registran un panel con el mismo nombre desde dos ensamblados distintos (pregunta
 abierta señalada por `revit-developer`, sin verificar hasta ahora).
 
