@@ -191,7 +191,7 @@ confirmación está mintiendo.
 
 ## Lote 4 — Verificación en Revit vivo (depende del Lote 2, la ejecuta el usuario)
 
-- [ ] @tester · Preparar el guion de verificación: escribir en
+- [x] @tester · Preparar el guion de verificación: escribir en
   `pocs/002-poc-2-paquete-nuget-metadatos-api-revit/GUION-VERIFICACION.md` la secuencia exacta que
   el usuario debe seguir, con el resultado esperado de cada paso y un hueco para anotar lo observado,
   mismo patrón que `pocs/001-poc-1-sdk-oficial-de-mcp-para-net/GUION-VERIFICACION.md`. Debe cubrir, en
@@ -205,6 +205,11 @@ confirmación está mintiendo.
   cargar (edge case de `requirements.md`: desajuste de versión entre los metadatos del paquete y el
   runtime real de Revit 2026) — ese resultado no descarta el PoC de raíz, pero condiciona el veredicto
   vía FR-009. Dejar explícito que ningún agente puede rellenar los `Observado:`, solo prepararlos.
+  **Resultado**: `pocs/002-poc-2-paquete-nuget-metadatos-api-revit/GUION-VERIFICACION.md` — 6
+  secciones (preparación, build NuGet, build Local con observación abierta del panel duplicado,
+  criterio de equivalencia en tabla, edge case de carga con triaje NuGet/Local/ambos, limpieza).
+  Rutas y literales (nombre de panel, texto de botón, tooltip, mensaje de diálogo) verificados
+  contra los ficheros reales del Lote 2, no inventados. **Pendiente de ejecución por el usuario.**
 - [ ] @tester · Recoger y diagnosticar lo anotado por el usuario: una vez el usuario haya ejecutado el
   guion, reportar qué quedó cumplido y qué no, citando la evidencia real anotada (no una inferencia).
   Si algo falló, distinguir si el problema es del paquete NuGet (compila pero el runtime no coincide),
