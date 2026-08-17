@@ -1,4 +1,4 @@
-# Estado del proyecto — última actualización 2026-08-17 (sesión 2, en curso — PoC #2 a medias)
+# Estado del proyecto — última actualización 2026-08-17 (fin de sesión 2 — PoC #2 a medias, 12/16)
 
 Fichero de relevo entre sesiones. Léelo antes de continuar. La verdad detallada está en
 `specs/` y en el `plan.md` del PoC; esto es el mapa.
@@ -68,55 +68,85 @@ Sin corregirlos, el veredicto habría sido *«el SDK oficial no sirve»* y se ha
 lenguaje sobre una premisa falsa. **Conclusión operativa: en el Tier 0, quien escribe el código no
 puede ser quien lo verifica.**
 
-## PoC #2 — Paquete NuGet de metadatos de la API de Revit — EN EJECUCIÓN AHORA MISMO
+## PoC #2 — Paquete NuGet de metadatos de la API de Revit — PAUSADO A MEDIAS, Lote 4 en curso
 
-**Estado del pipeline de specs**: `requirements.md` generado y con sus 6 gaps ya cerrados vía
-`/aisy.clarify-feature` (decisiones: reconocimiento previo del paquete como el Lote 1 del PoC #1;
-CI en GitHub Actions; evidencia de equivalencia = confirmación manual anotada por el usuario en
-Revit vivo; tests del addin trivial se crean en este PoC, no existen previos; falta de cobertura de
-ensamblados extra no bloquea el veredicto). `plan.md` generado vía `/aisy.plan-feature` con **5
-Lotes, 16 tareas** (ver tabla de agentes más abajo). Ninguna tarea del plan lleva tag `@human`, pero
-las tareas del Lote 4 (verificación en Revit vivo) requieren que **el usuario** ejecute a mano el
-`GUION-VERIFICACION.md` que preparará `@tester` — hasta que eso pase, esa tarea se bloqueará sola en
-el loop de `/aisy.implement-feature` (comportamiento esperado, no es un fallo).
-
-**Ejecución (`/aisy.implement-feature`) en marcha**:
+Especificado (`requirements.md`, 6 gaps cerrados vía `/aisy.clarify-feature`) y planificado
+(`plan.md`, 5 Lotes, 16 tareas) en esta sesión. Ejecutado vía `/aisy.implement-feature` en un
+worktree dedicado:
 
 - Worktree: `D:\Arquitectura\W_TRABAJOS\12_IA_OPT\2605_PROMPT_TO_REVIT\.worktrees\002-poc-2-paquete-nuget-metadatos-api-revit`
-- Rama: `feature/002-poc-2-paquete-nuget-metadatos-api-revit` (creada desde `dev`, commit `088db80`)
-- Modo: secuencial, plan único (no hubo que preguntar paralelo/secuencial)
-- **Última tarea disparada**: Lote 1, tarea 1 ("Identificar el paquete NuGet candidato"), agente
-  `@architect` en background, **sin resultado recibido todavía en la sesión que escribió esto**. Si
-  retomas y no ha llegado notificación, hay que asumir que el agente se perdió con el cierre de sesión
-  y **relanzarlo desde cero** (no hay forma de reconectar a un agente en background de una sesión ya
-  cerrada). El prompt exacto que se le dio está en el propio `plan.md`, tarea 1 del Lote 1 — basta con
-  volver a montar el mismo prompt (task + batch + contexto del plan + working directory = la ruta del
-  worktree de arriba) y volver a lanzarlo.
-- **`plan.md` sigue con las 16 tareas en `- [ ]`**: no se ha marcado ninguna todavía porque la tarea 1
-  no había terminado. No hay commits en la rama del worktree.
-- Progreso real: **0/16 tareas confirmadas completas.**
+- Rama: `feature/002-poc-2-paquete-nuget-metadatos-api-revit`, **publicada en GitHub** y al día
+  (último commit `3a2dc8b`, sin nada pendiente de push en el worktree).
+- **Progreso: 12/16 tareas** (Lotes 1, 2 y 3 cerrados y commiteados; Lote 4 con su tarea 1 hecha,
+  tarea 2 a medias). Detalle y evidencia de cada tarea, con su **Resultado** anotado, en
+  `specs/002-poc-2-paquete-nuget-metadatos-api-revit/plan.md` dentro del worktree (el `plan.md` de
+  este PoC vive solo ahí, no en la raíz del repo — se copió al worktree al arrancar la ejecución).
 
-**Cómo retomar**: entra en el repo (no hace falta `cd` al worktree para orquestar, el propio
-`/aisy.implement-feature` ya sabe trabajar contra la ruta del worktree), invoca de nuevo
-`/aisy.implement-feature`, selecciona el plan de PoC #2 (ya tiene el worktree y la rama creados —
-la skill debería detectarlos y reusarlos; si `git worktree add` falla porque ya existen, es la razón,
-no un error real) y sigue el loop de tareas desde la 1.
+**Lo que ya quedó demostrado con evidencia real** (no solo en esta máquina):
+- Paquete elegido: `Nice3point.Revit.Api.RevitAPI` + `.RevitAPIUI`, versión exacta `[2026.4.10]`
+  (razón completa en `RECONOCIMIENTO.md` del PoC, dentro del worktree).
+- **CI en verde en GitHub Actions**, runner `windows-latest` sin Revit instalado:
+  https://github.com/Ashromer/prompt-to-revit/actions/runs/32069521493 — compila Debug y Release,
+  tests pasan. Esto prueba Historia 1 e Historia 3 con evidencia real, no solo "compiló en mi
+  máquina" (esta máquina tiene Revit instalado y por sí sola no puede probarlo).
+- `dotnet list package` confirma `RevitAPI`/`RevitAPIUI` resueltos — SC-003 cumplido.
+
+**Dónde se quedó exactamente (Lote 4, tarea 2 — verificación en Revit vivo, la ejecuta el
+usuario)**: el usuario siguió el `GUION-VERIFICACION.md` hasta A2.2 inclusive.
+
+- A1.1-A1.4 (build NuGet solo): **todo correcto**, botón visible, diálogo esperado, sin error.
+- A2.1 (copiar también el build Local, sin quitar el NuGet): **correcto**.
+- A2.2 (reabrir Revit con los dos addins a la vez): **falló** —
+  `Autodesk.Revit.Exceptions.ArgumentException: The panel with name PoC #2 NuGet vs Local already
+  exists!`, con traza en `PocRevitAddin.App.OnStartup`. Captura del usuario guardada en
+  `pocs/002-poc-2-paquete-nuget-metadatos-api-revit/Captura.PNG` (worktree).
+- **Diagnóstico (ya documentado en el propio guion, bloque HALLAZGO tras A2.1)**: no es un fallo
+  del PoC ni activa FR-009. Los dos addins registran un panel con el mismo nombre
+  (`"PoC #2 NuGet vs Local"`) desde ensamblados distintos, y Revit no lo permite — el nombre de
+  panel es único por pestaña, no por addin (el supuesto de `revit-developer` de que convivirían
+  como paneles separados era incorrecto). Es un defecto del propio diseño del guion de
+  verificación (probar ambos addins cargados simultáneamente), no de la hipótesis del PoC
+  (ADR-008: referenciar la API por paquete NuGet de metadatos).
+- **Procedimiento de aislamiento ya escrito en el guion** (bloque HALLAZGO, tras A2.1): mover
+  temporalmente `PocRevitAddin.Nuget.addin` fuera de la carpeta de Addins (con
+  `Move-Item ... .addin .bak`), reabrir Revit con solo el build Local cargado, completar A2.4/A2.5
+  sobre el botón Local en solitario, y luego restaurar el `.addin` del NuGet antes de la sección 3
+  (comandos `Move-Item` exactos ya están en el guion, copiables tal cual).
+
+**Siguiente paso exacto al retomar**: pedirle al usuario que ejecute el procedimiento de
+aislamiento del bloque HALLAZGO (mover el `.addin` del NuGet, reabrir Revit, completar A2.4/A2.5
+del build Local, restaurar el `.addin`), luego seguir con la sección 3 (criterio de equivalencia)
+y el resto del guion (§4 no aplica salvo que aparezca un fallo nuevo, §5 solo si algo más falla, §6
+limpieza). Con eso cerrado, Lote 4 tarea 2 (`@tester` recoge y diagnostica lo anotado) y todo el
+Lote 5 (veredicto, TechSpec, roadmap, `@judge`) — pendientes, plan.md los tiene detallados.
+
+**Aviso de proceso para quien retome**: los agentes de código (`revit-developer`,
+`test-developer`, `code-developer`) **no tienen shell en esta sesión** — solo escriben ficheros.
+El orquestador debe compilar/ejecutar él mismo con PowerShell después de cada tarea de código, no
+asumir que el agente lo hizo. Ya pasó una vez en el Lote 2 (quedó `BLOCKED` y hubo que compilar a
+mano) — evitarlo dando esta instrucción por adelantado en el prompt de la tarea, como se hizo desde
+la tarea 3 en adelante.
 
 ## Otro trabajo pendiente
 
-1. Decidir con el usuario si procede PR de `dev` contra `main` para el PoC #1 (ya cerrado), o si se
-   espera a tener también el PoC #2 cerrado antes de tocar `main`.
+1. Decidir con el usuario si procede PR de `dev` contra `main` para el PoC #1 (ya cerrado, ya
+   publicado en `origin/dev`), o si se espera a tener también el PoC #2 cerrado antes de abrirlo.
 
 ## Deuda y cabos sueltos
 
 - **Los issues #1 a #5 no están enlazados** en la tabla de seguimiento de `specs/roadmap.md` (celdas
   a `—`). Commit en `dev`, nunca en `main`.
-- **Dos commits con el email personal del usuario** en el historial público: `e255255` y `53728a9`.
-  Los posteriores usan `Ashromer@users.noreply.github.com`. Reescribirlos exige levantar la
-  protección de `main`, `filter-branch`, force-push y restaurarla.
-- `main` está protegido con `enforce_admins: true` y `allow_force_pushes: false`: bloquea también al
-  propietario. Cualquier reescritura necesita levantar la protección temporalmente.
-- La rama `feature/001-poc-sdk-mcp-net` no está publicada en GitHub.
+- ~~Dos commits con el email personal del usuario en el historial público~~ **RESUELTO en esta
+  sesión (2026-08-17)**: `origin/dev` y `origin/main` reescritos. `origin/dev` ahora en `b7bf4fb`
+  (historia completa, con `0761a97`/`b94093a` de email corregido en la base). `origin/main` solo en
+  `b94093a` (los dos commits base corregidos, sin arrastrar el trabajo del PoC #1 — eso entra por
+  PR). Se necesitaron dos reglas de protección de `main` levantadas temporalmente
+  (`allow_force_pushes` y `required_pull_request_reviews`, ambas restauradas exactamente al estado
+  original tras el push). El agente no puede tocar `gh api .../protection` (bloqueado por el
+  clasificador de auto mode): lo ejecutó el usuario a mano cada vez.
+- `main` sigue protegido igual que antes (`enforce_admins: true`, `allow_force_pushes: false`, PR
+  obligatorio). Cualquier reescritura futura necesita repetir el mismo procedimiento manual.
+- La rama `feature/001-poc-sdk-mcp-net` no está publicada en GitHub (el merge a `dev` fue local).
 
 ## Cómo trabajar en este proyecto
 
