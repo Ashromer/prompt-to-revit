@@ -125,4 +125,29 @@ public static class BaseCommands
 
         return tipos;
     }
+
+    [ComandoRevit("ObtenerCamposDisponiblesParaTabla")]
+    public static object ObtenerCamposDisponiblesParaTabla(Document doc, string categoriaBuiltIn)
+    {
+        // Base para CrearTablaPlanificacion (ModelingCommands.cs): la API de Revit solo expone los
+        // campos disponibles a través de una ViewSchedule ya creada (GetSchedulableFields vive en
+        // ScheduleDefinition, no hay forma de consultarlo "en abstracto" para una categoría). Se
+        // crea una tabla temporal dentro de la transacción y se hace RollBack en vez de Commit --
+        // pura lectura, nada se persiste en el modelo, el usuario nunca la ve.
+        if (!Enum.TryParse(categoriaBuiltIn, out BuiltInCategory catEnum))
+            throw new ArgumentException($"La categoría '{categoriaBuiltIn}' no es válida.");
+
+        List<string> nombres;
+        using (var tx = new Transaction(doc, "Consultar campos de tabla (descartado)"))
+        {
+            tx.Start();
+            var tablaTemporal = ViewSchedule.CreateSchedule(doc, new ElementId(catEnum));
+            nombres = tablaTemporal.Definition.GetSchedulableFields()
+                .Select(f => f.GetName(doc))
+                .ToList();
+            tx.RollBack();
+        }
+
+        return nombres;
+    }
 }

@@ -381,28 +381,100 @@ public static class ModelingCommands
         using (var tx = new Transaction(doc, "Modificar Parámetro MCP"))
         {
             tx.Start();
-            switch (param.StorageType)
-            {
-                case StorageType.String:
-                    param.Set(valor);
-                    break;
-                case StorageType.Integer:
-                    if (int.TryParse(valor, out int iVal)) param.Set(iVal);
-                    else throw new ArgumentException("El valor no es un Integer válido.");
-                    break;
-                case StorageType.Double:
-                    if (double.TryParse(valor, out double dVal)) param.Set(dVal);
-                    else throw new ArgumentException("El valor no es un Double válido.");
-                    break;
-                case StorageType.ElementId:
-                    if (int.TryParse(valor, out int idVal)) param.Set(new ElementId(idVal));
-                    else throw new ArgumentException("El valor no es un ElementId válido.");
-                    break;
-            }
+            EstablecerValorParametro(param, valor);
             tx.Commit();
         }
 
         return new { Id = elem.Id.Value, Parametro = parametroNombre, NuevoValor = param.AsValueString() ?? valor };
+    }
+
+    [ComandoRevit("ModificarParametrosMasivo")]
+    public static object ModificarParametrosMasivo(Document doc, string jsonModificaciones)
+    {
+        // Composición de lo ya existente (ModificarParametro), no una capacidad nueva de Revit:
+        // el hueco real era la UX -- rellenar N elementos desde datos externos (p. ej. un PDF de
+        // materiales que Claude ya sabe leer) significaba N ventanas de aprobación sueltas, que es
+        // exactamente el riesgo de "aprobar mecánicamente sin mirar" que DOCUMENTACION.md señala
+        // para la revisión humana. Una única aprobación con el resumen agregado del lote.
+        var opciones = new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+        var modificaciones = System.Text.Json.JsonSerializer.Deserialize<List<Dictionary<string, System.Text.Json.JsonElement>>>(jsonModificaciones, opciones);
+
+        if (modificaciones == null || modificaciones.Count == 0) return new { Modificados = 0 };
+
+        var entradas = new List<(ElementId ElemId, string Parametro, string Valor)>();
+        foreach (var mod in modificaciones)
+        {
+            if (mod.TryGetValue("elementoId", out var idEl) &&
+                mod.TryGetValue("parametro", out var paramEl) &&
+                mod.TryGetValue("valor", out var valorEl))
+            {
+                entradas.Add((new ElementId(idEl.GetInt32()), paramEl.GetString() ?? "", valorEl.ToString()));
+            }
+        }
+
+        if (entradas.Count == 0) return new { Modificados = 0 };
+
+        // F2.5, vía el mismo helper compartido que el resto del catálogo.
+        var idsLong = entradas.Select(e => (long)e.ElemId.Value);
+        if (PreexistingElementGuard.RequiereAprobacion(idsLong, App.ElementosCreadosEnSesion))
+        {
+            var categorias = entradas.Select(e => doc.GetElement(e.ElemId)?.Category?.Name ?? "Desconocido");
+            var resumen = DeletionPreview.ConstruirResumen("modificar parámetros de", categorias);
+            var approval = new RevitBridge.Addin.UI.ApprovalService();
+            if (!approval.SolicitarAprobacion(resumen))
+                throw new InvalidOperationException("Modificación masiva de parámetros cancelada por el usuario.");
+        }
+
+        int modificados = 0;
+        var errores = new List<string>();
+        using (var tx = new Transaction(doc, $"Modificar {entradas.Count} Parámetros MCP"))
+        {
+            tx.Start();
+            foreach (var (elemId, parametroNombre, valor) in entradas)
+            {
+                try
+                {
+                    var elem = doc.GetElement(elemId);
+                    if (elem == null) { errores.Add($"Elemento {elemId.Value} no encontrado."); continue; }
+
+                    var param = elem.LookupParameter(parametroNombre);
+                    if (param == null) { errores.Add($"'{parametroNombre}' no existe en el elemento {elemId.Value}."); continue; }
+                    if (param.IsReadOnly) { errores.Add($"'{parametroNombre}' es de solo lectura en el elemento {elemId.Value}."); continue; }
+
+                    EstablecerValorParametro(param, valor);
+                    modificados++;
+                }
+                catch (Exception ex)
+                {
+                    errores.Add(ex.Message);
+                }
+            }
+            tx.Commit();
+        }
+
+        return new { ElementosModificados = modificados, ErroresOmitidos = errores.Count, Errores = errores };
+    }
+
+    private static void EstablecerValorParametro(Parameter param, string valor)
+    {
+        switch (param.StorageType)
+        {
+            case StorageType.String:
+                param.Set(valor);
+                break;
+            case StorageType.Integer:
+                if (int.TryParse(valor, out int iVal)) param.Set(iVal);
+                else throw new ArgumentException("El valor no es un Integer válido.");
+                break;
+            case StorageType.Double:
+                if (double.TryParse(valor, out double dVal)) param.Set(dVal);
+                else throw new ArgumentException("El valor no es un Double válido.");
+                break;
+            case StorageType.ElementId:
+                if (int.TryParse(valor, out int idVal)) param.Set(new ElementId(idVal));
+                else throw new ArgumentException("El valor no es un ElementId válido.");
+                break;
+        }
     }
 
     [ComandoRevit("CrearNivel")]
@@ -610,6 +682,48 @@ public static class ModelingCommands
         }
 
         return new { Id = tejado!.Id.Value, Tipo = roofType?.Name };
+    }
+
+    [ComandoRevit("CrearTablaPlanificacion")]
+    public static object CrearTablaPlanificacion(Document doc, string categoriaBuiltIn, string? camposNombres = null)
+    {
+        // Firma de ViewSchedule.CreateSchedule/ScheduleDefinition.AddField verificada por reflexión
+        // contra el paquete NuGet antes de escribir esto, mismo criterio que los comandos de tejado.
+        // Vía dedicada de consulta primero: ObtenerCamposDisponiblesParaTabla (BaseCommands.cs)
+        // resuelve los nombres reales de campo antes de llamar aquí (§5.A.1, no adivinar nombres).
+        if (!Enum.TryParse(categoriaBuiltIn, out BuiltInCategory catEnum))
+            throw new ArgumentException($"La categoría '{categoriaBuiltIn}' no es válida.");
+
+        List<string>? nombresPedidos = null;
+        if (!string.IsNullOrWhiteSpace(camposNombres))
+        {
+            var opciones = new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            nombresPedidos = System.Text.Json.JsonSerializer.Deserialize<List<string>>(camposNombres, opciones);
+        }
+
+        ViewSchedule? tabla = null;
+        var camposAnadidos = new List<string>();
+        using (var tx = new Transaction(doc, $"Crear Tabla {categoriaBuiltIn} MCP"))
+        {
+            tx.Start();
+
+            tabla = ViewSchedule.CreateSchedule(doc, new ElementId(catEnum));
+            var definicion = tabla.Definition;
+
+            foreach (var campo in definicion.GetSchedulableFields())
+            {
+                var nombre = campo.GetName(doc);
+                if (nombresPedidos == null || nombresPedidos.Contains(nombre, StringComparer.OrdinalIgnoreCase))
+                {
+                    definicion.AddField(campo);
+                    camposAnadidos.Add(nombre);
+                }
+            }
+
+            tx.Commit();
+        }
+
+        return new { Id = tabla!.Id.Value, Nombre = tabla.Name, Campos = camposAnadidos };
     }
 
     private static ElementId ResolverTipoPorDefecto<T>(Document doc, int tipoId) where T : ElementType

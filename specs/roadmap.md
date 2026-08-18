@@ -297,6 +297,24 @@ toque (verificar contra el paquete NuGet exacto antes de codificar, no asumir la
 > comandos de tejado, geometría nunca antes probada en este proyecto), y el spike no bloqueante de
 > ADR-012 contra un DXF/DWG real de terceros — bloqueado en que el usuario aporte un fichero real,
 > no en trabajo pendiente de este lado.
+>
+> **2026-08-18, tercera pasada — tablas de planificación y modificación masiva de parámetros**:
+> pedido del usuario para "seguir mejorando la biblioteca", con dos hallazgos previos: la
+> visualización interactiva de datos del proyecto y el rellenado de materiales desde un PDF externo
+> **no necesitaban código nuevo** — son composición de comandos ya existentes
+> (`ExportarContextoMasivo`, `ModificarParametro`) con capacidades que Claude ya tiene (Artifacts,
+> visión). Lo único que faltaba de verdad era la UX de aprobación en lote para modificaciones
+> masivas, no una capacidad de Revit nueva. Añadidos:
+> - `ObtenerCamposDisponiblesParaTabla` + `CrearTablaPlanificacion` (`ViewSchedule.CreateSchedule`/
+>   `ScheduleDefinition.AddField`, firmas verificadas por reflexión antes de codificar). La consulta
+>   de campos crea una tabla temporal dentro de una transacción y hace `RollBack` en vez de
+>   `Commit` -- la API de Revit no expone los campos disponibles de otra forma, y así no se
+>   persiste nada visible para el usuario.
+> - `ModificarParametrosMasivo`: mismo patrón de aprobación única + `PreexistingElementGuard` que
+>   el resto del catálogo, en vez de una ventana de aprobación por elemento (el riesgo real de UX
+>   que sí hacía falta resolver para "rellenar materiales desde PDF" a escala).
+>
+> Nivel 1 únicamente (compila, sin tests automáticos posibles -- capa de adaptador sin Revit).
 
 Cada uno por su ciclo normal (`revit-developer` + `judge`, sin `architect` salvo que al implementar aparezca una decisión de diseño no prevista aquí) — no agrupados en un solo lote: son API de Revit distintas entre sí (host-based vs. free-standing vs. roof sketching), el riesgo de implementación no es uniforme.
 
