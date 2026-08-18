@@ -9,6 +9,7 @@
     <RootNamespace>RevitBridge.Addin</RootNamespace>
     <AssemblyName>RevitBridge.Addin</AssemblyName>
     <PlatformTarget>x64</PlatformTarget>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
   </PropertyGroup>
 
   <ItemGroup>

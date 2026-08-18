@@ -1,0 +1,39 @@
+<Window x:Class="RevitBridge.Addin.UI.ApprovalWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Aprobación de Código" Height="450" Width="600"
+        WindowStyle="ToolWindow" Topmost="True" ResizeMode="CanResizeWithGrip">
+    <Grid Margin="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        
+        <TextBlock Text="Código propuesto:" FontWeight="Bold" Margin="0,0,0,5" Grid.Row="0"/>
+        
+        <TextBox x:Name="CodeTextBox" 
+                 Grid.Row="1" 
+                 IsReadOnly="True" 
+                 TextWrapping="Wrap" 
+                 AcceptsReturn="True" 
+                 FontFamily="Consolas" 
+                 Background="#1E1E1E" 
+                 Foreground="#D4D4D4"
+                 VerticalScrollBarVisibility="Auto"
+                 Padding="5"/>
+                 
+        <Grid Grid.Row="2" Margin="0,10,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            
+            <TextBlock x:Name="TimerTextBlock" VerticalAlignment="Center" Foreground="Red" FontWeight="Bold"/>
+            
+            <Button x:Name="ApproveButton" Content="Aprobar" Background="LightGreen" Width="100" Height="30" Margin="0,0,10,0" Grid.Column="1" Click="ApproveButton_Click"/>
+            <Button x:Name="RejectButton" Content="Rechazar" Background="LightCoral" Width="100" Height="30" Grid.Column="2" Click="RejectButton_Click"/>
+        </Grid>
+    </Grid>
+</Window>

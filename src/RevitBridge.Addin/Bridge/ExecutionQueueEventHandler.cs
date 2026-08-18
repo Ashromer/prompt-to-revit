@@ -19,8 +19,16 @@ public sealed class ExecutionQueueEventHandler : IExternalEventHandler
 
     public void Execute(UIApplication app)
     {
-        var contexto = new RevitContext(app);
-        _cola.Procesar(contexto.Procesar);
+        try
+        {
+            var contexto = new RevitContext(app);
+            _cola.Procesar(contexto.Procesar);
+        }
+        catch (Exception ex)
+        {
+            // Falla silenciosamente o loggea, pero no crashea la aplicación host
+            System.Diagnostics.Trace.WriteLine($"Error en ExecutionQueueEventHandler: {ex}");
+        }
     }
 
     public string GetName() => "RevitBridge.ExecutionQueue";

@@ -14,6 +14,8 @@ namespace RevitBridge.Addin;
 /// </summary>
 public sealed class App : IExternalApplication
 {
+    public static System.Windows.Threading.Dispatcher RevitDispatcher { get; private set; }
+
     private ExecutionQueue? _cola;
     private ExternalEvent? _externalEvent;
     private PipeServer? _pipeServer;
@@ -22,6 +24,7 @@ public sealed class App : IExternalApplication
     {
         try
         {
+            RevitDispatcher = System.Windows.Threading.Dispatcher.CurrentDispatcher;
             // Falla pronto si hay nombres de comando duplicados en el catálogo (ADR-005), en vez
             // de descubrirlo la primera vez que alguien pida /commands.
             CommandCatalog.Descubrir(typeof(ComandoRevitAttribute).Assembly);

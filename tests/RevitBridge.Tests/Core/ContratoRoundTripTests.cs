@@ -85,19 +85,19 @@ public class ContratoRoundTripTests
     [Fact]
     public void RollbackRequest_Ida_Y_Vuelta_Es_Estable()
     {
-        var original = new RollbackRequest("2026-08-18T10:00:00Z");
+        var original = new RollbackRequest(new long[] { 1, 2, 3 });
 
         AssertRoundTrip(original);
     }
 
     [Fact]
-    public void RollbackRequest_Sin_Hasta_Serializa_Null()
+    public void RollbackRequest_Sin_Ids_Serializa_Null()
     {
-        var original = new RollbackRequest();
+        var original = new RollbackRequest(null);
 
         var json = JsonSerializer.Serialize(original);
 
-        Assert.Contains("\"hasta\":null", json);
+        Assert.Contains("\"ids\":null", json);
     }
 
     [Fact]

@@ -6,8 +6,12 @@ Fichero de relevo entre sesiones. Léelo antes de continuar. La verdad detallada
 ## Dónde está el trabajo ahora mismo
 
 **Gate Fase 0: ✅ CUMPLIDO.** Los dos PoCs bloqueantes están cerrados en positivo y mergeados en
-`dev`. `dev` local está sincronizado con `origin/dev` (`d2593c7`, fast-forward). **Tier 0 no se ha
-empezado — instrucción explícita del usuario al cerrar esta sesión: no arrancarlo todavía.**
+`dev`. `dev` local está sincronizado con `origin/dev`.
+
+**Tier 1: ✅ CUMPLIDO Y ESTABILIZADO.** Se ha completado la conexión en vivo con Revit (queries y transactions).
+Se detectaron y corrigieron crasheos críticos del proceso host (Revit) debidos a:
+1. Falta de captura de excepciones en hilos secundarios (`PipeServer`) y manejadores de API (`ExecutionQueueEventHandler`).
+2. Conflicto de carga de ensamblados por la versión de Roslyn (5.9.0 pedía `System.Collections.Immutable` v10, incompatible con Revit 2026 / .NET 8). Solucionado bajando la versión de `Microsoft.CodeAnalysis.CSharp` a la `4.8.0` y forzando la copia local de dependencias.
 
 ## PoC #1 — SDK oficial de MCP para .NET
 

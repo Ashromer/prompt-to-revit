@@ -7,4 +7,5 @@ namespace RevitBridge.Core;
 /// por defecto toda la sesión.
 /// </summary>
 public sealed record RollbackRequest(
+    [property: JsonPropertyName("ids")] System.Collections.Generic.IReadOnlyList<long>? Ids = null,
     [property: JsonPropertyName("hasta")] string? Hasta = null);

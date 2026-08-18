@@ -75,6 +75,12 @@ public sealed class PipeServer : IDisposable
                 // Instancia de pipe rota (p. ej. cliente que se desconecta a medio handshake):
                 // se descarta esta conexión y se reintenta con una instancia nueva.
             }
+            catch (Exception)
+            {
+                // Cualquier otra excepción no controlada no debe crashear el proceso de Revit entero.
+                // Se descarta y el bucle while(true) levantará un nuevo pipe.
+                Thread.Sleep(500); // Pequeña pausa para no saturar la CPU si es un error constante
+            }
             finally
             {
                 pipe?.Dispose();

@@ -47,4 +47,20 @@ public sealed class McpTools
         
         return JsonSerializer.Serialize(respuesta, JsonOptions);
     }
+
+    [McpServerTool(Name = "execute", Title = "Ejecutar script C# en Revit")]
+    [Description("Ejecuta codigo C# suministrado. Se abrira una ventana de aprobacion en Revit.")]
+    public async Task<string> Execute(
+        [Description("Codigo C# a ejecutar")] string codigo,
+        [Description("Intencion de la ejecucion")] string intencion,
+        CancellationToken cancellationToken)
+    {
+        var req = new ExecRequest(codigo, intencion);
+        var payload = JsonSerializer.SerializeToElement(req);
+        var peticion = new PeticionPipe(Operaciones.Exec, payload);
+
+        var respuesta = await _pipeClient.EnviarAsync(peticion, TimeSpan.FromSeconds(5), TimeSpan.FromMinutes(15), cancellationToken);
+        
+        return JsonSerializer.Serialize(respuesta, JsonOptions);
+    }
 }
