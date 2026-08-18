@@ -66,4 +66,42 @@ public static class ExtractionCommands
             Inventario = resumenCategorias
         };
     }
+
+    [ComandoRevit("ExportarGrafoTopologico")]
+    public static object ExportarGrafoTopologico(Document doc)
+    {
+        // Vital para la auditoría automática (F3.3) y análisis de CTE / Evacuación
+        var doors = new FilteredElementCollector(doc)
+            .OfCategory(BuiltInCategory.OST_Doors)
+            .OfClass(typeof(FamilyInstance))
+            .Cast<FamilyInstance>()
+            .ToList();
+
+        var grafo = new List<object>();
+
+        foreach (var door in doors)
+        {
+            var fromRoom = door.FromRoom;
+            var toRoom = door.ToRoom;
+            
+            // Anchura aproximada de la puerta
+            var widthParam = door.Symbol.LookupParameter("Width") ?? door.LookupParameter("Width");
+            var widthVal = widthParam?.AsDouble() ?? 0.0;
+
+            grafo.Add(new {
+                PuertaId = door.Id.Value,
+                Nombre = door.Name,
+                HandFlipped = door.HandFlipped,
+                FacingFlipped = door.FacingFlipped,
+                Width = widthVal,
+                FromRoom = fromRoom != null ? new { Id = fromRoom.Id.Value, Name = fromRoom.Name } : null,
+                ToRoom = toRoom != null ? new { Id = toRoom.Id.Value, Name = toRoom.Name } : null
+            });
+        }
+
+        return new {
+            TotalPuertas = doors.Count,
+            Conexiones = grafo
+        };
+    }
 }
