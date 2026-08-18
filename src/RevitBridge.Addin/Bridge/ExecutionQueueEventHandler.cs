@@ -17,7 +17,11 @@ public sealed class ExecutionQueueEventHandler : IExternalEventHandler
         _cola = cola;
     }
 
-    public void Execute(UIApplication app) => _cola.Procesar(ExecutionQueue.ProcesarPlaceholder);
+    public void Execute(UIApplication app)
+    {
+        var contexto = new RevitContext(app);
+        _cola.Procesar(contexto.Procesar);
+    }
 
     public string GetName() => "RevitBridge.ExecutionQueue";
 }
