@@ -447,3 +447,89 @@ con este fichero en cuanto esa PR se mergee. Aquí solo el resumen y el paso fin
   aprobación para creación masiva, persistencia de perfil de mapeo CAD (`cad_save_mapping_profile`)
   y, sobre todo, **toda verificación en Revit vivo** de lo construido en esta sesión — es el
   siguiente paso real, no una formalidad
+
+## [2026-08-18] Cierre de los 2 pendientes restantes + tablas de planificación + statusline (sesión sin el usuario delante)
+
+- Agentes usados: `claude-code-guide` (verificación de capacidades reales de statusline/hooks/temas
+  del CLI, no supuestas de memoria)
+- Usuario pidió cerrar `CargarFamilia` y el umbral de aprobación (el DWG real quedó bloqueado en que
+  el usuario aporte un fichero — no resoluble sin él), luego "seguir mejorando la biblioteca"
+  (visualización interactiva, tablas de planificación, materiales desde PDF), y finalmente confirmó
+  que se ausentaba por hoy y pidió seguir trabajando de forma autónoma "hasta que podamos" continuar
+- `CargarFamilia(doc, rutaArchivo)`: firma real de `Document.LoadFamily` verificada por
+  `MetadataLoadContext` antes de escribir código. `UmbralAprobacionCreacion` (Core): controlado
+  solo por variable de entorno `REVITBRIDGE_UMBRAL_APROBACION_CREACION`, nunca por parámetro del
+  comando, aplicado de forma centralizada a los 6 comandos de creación masiva/tejado
+- Visualización interactiva y materiales desde PDF: **no necesitaban código** — composición de
+  comandos ya existentes con capacidades que Claude ya tiene (Artifacts, visión). El único hueco
+  real de UX era N aprobaciones sueltas al modificar N parámetros → `ModificarParametrosMasivo`,
+  una sola aprobación agregada, reutilizando `PreexistingElementGuard`/`DeletionPreview`. El switch
+  de `StorageType` de `ModificarParametro` se extrajo a `EstablecerValorParametro` compartido
+- Tablas de planificación: `ObtenerCamposDisponiblesParaTabla` + `CrearTablaPlanificacion`. Firma de
+  `ViewSchedule.CreateSchedule`/`ScheduleDefinition.AddField`/`SchedulableField.GetName` verificada
+  por reflexión antes de codificar. La consulta de campos crea una tabla temporal dentro de una
+  `Transaction` y hace `RollBack` en vez de `Commit` — la API de Revit no expone los campos
+  disponibles de una categoría sin crear antes una `ViewSchedule` real, y así no se persiste nada
+  visible para el usuario solo por preguntar
+- `revit_api_knowledge.md` (global, `~/.claude/`) actualizado con lo aprendido hoy: técnica de
+  `MetadataLoadContext` para verificar firmas de paquetes de solo-referencia sin Revit, API real de
+  ACadSharp (DXF+DWG con un modelo, bulge, `Insert`/`BlockRecord`), teselado de bulge por bisección
+  recursiva en vez de centro/radio, tabla de firmas de Revit 2026 confirmadas esta sesión — cumple
+  la instrucción de `CLAUDE.md` global de actualizarlo al cierre de cada sesión de plugin
+- **Indicador visual de RevitBridge en el CLI**: pedido del usuario ("cambiar colores o un iconito
+  cuando el Bridge esté activo"). Antes de construir nada, se lanzó `claude-code-guide` para
+  verificar capacidades reales en vez de suponerlas — confirmó que **no existe cambio de tema
+  dinámico** en Claude Code hoy, que la statusline no ve qué MCP está conectado directamente, pero
+  que un hook `PreToolUse` sí puede detectar el nombre completo de la herramienta
+  (`mcp__<server>__<tool>`) y la statusline sí soporta ANSI+emoji. Solución de dos piezas, siguiendo
+  el flujo completo de la skill `update-config` (construir → pipe-test → escribir JSON → validar →
+  intentar probar en vivo):
+  1. `~/.claude/revitbridge-statusline.ps1`: lee JSON de stdin, resuelve `model.id`/`cwd`, comprueba
+     si `~/.claude/revitbridge_active.txt` existe y su timestamp es de los últimos 5 minutos: si sí,
+     imprime `🏗 RevitBridge` en naranja/negrita + el directorio; si no, la statusline normal
+     (directorio + modelo). `[Console]::OutputEncoding = UTF8` explícito para que el emoji no se
+     corrompa al invocarse como subproceso no interactivo desde PowerShell 5.1 en Windows
+  2. Hook `PreToolUse` en `~/.claude/settings.json`, matcher `mcp__RevitBridge__.*`, escribe el
+     timestamp UTC actual al fichero de flag. Ventana de 5 min en vez de borrado inmediato por
+     `PostToolUse` — evita parpadeo si hay huecos cortos entre llamadas dentro de la misma sesión
+     de trabajo con Revit
+  - Ambos componentes pipe-testeados directamente (JSON sintético por stdin → comando real), con
+    resultado verificado byte a byte (emoji + códigos ANSI correctos, expiración a los 5 min
+    confirmada con un flag de 10 min de antigüedad). `ConvertFrom-Json` sobre el `settings.json`
+    final confirma JSON válido y la estructura exacta (equivalente a `jq -e` sin tener `jq`
+    instalado)
+  - **No se pudo probar en vivo dentro de Claude Code** (paso 6 de la skill): el matcher
+    `mcp__RevitBridge__.*` no se puede disparar en esta sesión porque **el servidor MCP
+    "RevitBridge" no está registrado todavía** en la config de Claude Code (`~/.claude.json` no
+    tiene ninguna entrada `mcpServers` con ese nombre — confirmado por grep, no solo asumido).
+    Hallazgo colateral real: toda la pasarela lleva construida desde hace días pero nunca se ha
+    conectado a Claude Code como servidor MCP en esta máquina
+  - Pendiente para mañana, en orden: (1) registrar el servidor —
+    `claude mcp add RevitBridge -- "D:\Arquitectura\W_TRABAJOS\12_IA_OPT\2605_PROMPT_TO_REVIT\src\RevitBridge.Mcp\bin\Debug\net8.0\RevitBridge.Mcp.exe"`
+    (el exe ya existe, confirmado); (2) con Revit abierto y el addin cargado, invocar cualquier
+    herramienta `mcp__RevitBridge__*` y comprobar que la statusline cambia a "🏗 RevitBridge" en los
+    ~5 s siguientes (`refreshInterval`); (3) si no cambia pese al registro correcto, es el caveat de
+    la skill: el watcher de `~/.claude/` puede no estar observando ese directorio si no tenía un
+    fichero de settings al arrancar la sesión — abrir `/hooks` una vez o reiniciar Claude Code
+- Verificación: Debug y Release limpios, `dotnet test` 108/108 (sin tests nuevos posibles para
+  `CrearTablaPlanificacion`/`ModificarParametrosMasivo`, capa de adaptador sin Revit). El indicador
+  de CLI es config personal, no código de producto — no aplica "compila/testea", su verificación es
+  el pipe-test descrito arriba (nivel equivalente a "verificado fuera de Revit") más la prueba en
+  vivo pendiente
+- Qué falló o costó más de lo esperado: nada técnicamente, pero el hallazgo de que el servidor MCP
+  nunca se registró es relevante — significa que **nada de lo construido en esta sesión (ni en
+  sesiones anteriores) se ha invocado nunca de verdad desde una conversación de Claude Code real**,
+  solo compilado y, para el catálogo de comandos, corrido manualmente por `scratch/shoot.ps1`
+  contra el named pipe directamente. Confirma que el primer paso de mañana no es solo "abrir Revit",
+  es también "registrar el MCP server", paso que no estaba en ningún checklist previo de este log
+- Aprendizaje: cuando una petición de UX/DX toca configuración de la propia herramienta (Claude Code
+  CLI) en vez de código del proyecto, verificar las capacidades reales con `claude-code-guide` antes
+  de construir nada es tan importante como verificar una firma de API de Revit con
+  `MetadataLoadContext` — la disciplina es la misma, el dominio cambia. Y antes de dar por sentado
+  que "el bridge está listo para usarse", comprobar que el servidor MCP está de verdad registrado en
+  la config de Claude Code, no solo que el `.exe` compila
+- Checkpoint: `dev` con 7 commits de esta sesión, todos pusheados. Config personal
+  (`~/.claude/settings.json`, `~/.claude/revitbridge-statusline.ps1`,
+  `~/.claude/revit_knowledge/revit_api_knowledge.md`) actualizada y verificada fuera de vivo. Nada
+  en vuelo. Pendiente real para la próxima sesión: registrar el MCP server (primero de todo),
+  después toda la verificación en Revit vivo acumulada de las últimas sesiones
