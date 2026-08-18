@@ -91,4 +91,42 @@ public static class ViewCommands
 
         return new { Id = vp.Id.Value, SheetId = planoId, ViewId = vistaId };
     }
+
+    [ComandoRevit("ColorearCategoriaEnVista")]
+    public static object ColorearCategoriaEnVista(Document doc, string categoriaBuiltIn, byte r, byte g, byte b)
+    {
+        // TRADUCCIÓN NATIVA DESDE PYTHON (Fagocitado de RevitGeminiRAG: color_all_walls_red_in_view.py)
+        var activeView = doc.ActiveView;
+        if (activeView == null || activeView.IsTemplate || activeView.ViewType == ViewType.Schedule)
+            throw new InvalidOperationException("La vista activa no admite override gráfico.");
+
+        if (!Enum.TryParse(categoriaBuiltIn, out BuiltInCategory catEnum))
+            throw new ArgumentException($"La categoría '{categoriaBuiltIn}' no es válida.");
+
+        var color = new Autodesk.Revit.DB.Color(r, g, b);
+        var overrideSettings = new OverrideGraphicSettings();
+        
+        overrideSettings.SetProjectionLineColor(color);
+        overrideSettings.SetCutLineColor(color);
+        // Evitamos patrones para mantener simplicidad gráfica
+
+        var collector = new FilteredElementCollector(doc, activeView.Id)
+            .OfCategory(catEnum)
+            .WhereElementIsNotElementType()
+            .ToElementIds();
+
+        int afectados = 0;
+        using (var tx = new Transaction(doc, $"Colorear {categoriaBuiltIn} MCP"))
+        {
+            tx.Start();
+            foreach (var id in collector)
+            {
+                activeView.SetElementOverrides(id, overrideSettings);
+                afectados++;
+            }
+            tx.Commit();
+        }
+
+        return new { Categoria = categoriaBuiltIn, Color = $"RGB({r},{g},{b})", ElementosAfectados = afectados };
+    }
 }
