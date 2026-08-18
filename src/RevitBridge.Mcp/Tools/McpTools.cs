@@ -63,4 +63,31 @@ public sealed class McpTools
         
         return JsonSerializer.Serialize(respuesta, JsonOptions);
     }
+
+    [McpServerTool(Name = "run_command", Title = "Ejecutar comando pre-compilado de Revit")]
+    [Description("Invoca un comando pre-compilado descubierto en el catalogo de Revit. Revisa la lista de comandos disponibles primero.")]
+    public async Task<string> RunCommand(
+        [Description("Nombre exacto del comando a ejecutar (ej: ExportarContextoMasivo, DuplicarVista, CrearMuroRecto)")] string nombreComando,
+        [Description("Argumentos del comando en formato JSON dictionary. Escribe '{}' o null si el comando no tiene argumentos.")] string? argumentosJson,
+        CancellationToken cancellationToken)
+    {
+        Dictionary<string, JsonElement>? args = null;
+        if (!string.IsNullOrWhiteSpace(argumentosJson) && argumentosJson != "null")
+        {
+            try
+            {
+                args = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(argumentosJson);
+            }
+            catch { /* fallback a nulo si falla parseo */ }
+        }
+
+        // Requiere: using RevitBridge.Core; al inicio del archivo
+        var req = new CommandRequest(nombreComando, args);
+        var payload = JsonSerializer.SerializeToElement(req);
+        var peticion = new PeticionPipe(Operaciones.Command, payload);
+
+        var respuesta = await _pipeClient.EnviarAsync(peticion, TimeSpan.FromSeconds(5), TimeSpan.FromMinutes(15), cancellationToken);
+        
+        return JsonSerializer.Serialize(respuesta, JsonOptions);
+    }
 }
