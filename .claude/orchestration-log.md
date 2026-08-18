@@ -585,3 +585,32 @@ con este fichero en cuanto esa PR se mergee. Aquí solo el resumen y el paso fin
   este proyecto. Y: `Assembly.GetTypes()` sobre `RevitBridge.Addin` es intrínsecamente nivel-3 (solo
   dentro de Revit) — cualquier test futuro que quiera ejercitarlo de verdad tendrá el mismo límite
 - Checkpoint: `dev` con 8 commits de esta sesión, todos pusheados. Nada en vuelo.
+
+## [2026-08-18] Vendorizar skill externa `/diagram-design`
+
+- Agentes usados: ninguno, directo en la conversación principal
+- Petición del usuario: preguntó si el estilo de diagramas de
+  `github.com/cathrynlavery/diagram-design` serviría para este proyecto; tras la respuesta pidió
+  instalarla, documentarla, verificarla y pushear
+- Qué se hizo: clonado el repo a un temporal, comprobada la licencia (MIT, con iconos de terceros
+  MIT/CC0 documentados en su propio `THIRD_PARTY_LICENSES.md`) y revisados los 3 scripts Python
+  (`drawio_extract`, `mermaid_extract`, `self_check`) antes de traerlos al repo — sin
+  `subprocess`/`eval`/`exec`/`os.system`, solo `urllib.parse` para validar que los assets no
+  referencian URLs remotas (consistente con el diseño "sin dependencias externas" que anuncia la
+  skill). Copiada íntegra a `.claude/skills/diagram-design/` (152 ficheros) + `LICENSE-UPSTREAM` +
+  `THIRD_PARTY_LICENSES.md` de atribución. Documentada en `CLAUDE.md` como sección nueva, distinta
+  de la tabla de las 4 skills ad-hoc de autoría propia — es vendorizada, no escrita para este
+  proyecto, y es una capa de presentación (genera diagramas a partir de `DOCUMENTACION.md`/specs/
+  `revit_api_knowledge.md`), no una fuente de verdad nueva
+- Verificación: copia byte-idéntica confirmada por hash SHA256 contra los 152 ficheros del upstream
+  (sin mismatches); la skill aparece en el listado de skills disponibles de esta misma sesión tras
+  copiarla (prueba de que el `SKILL.md` tiene frontmatter válido y Claude Code la descubrió). No
+  aplica "compila"/`dotnet test` — no es código de producto, es una skill de Markdown/HTML estático
+- Qué falló o costó más de lo esperado: nada — el repo era autocontenido y sin dependencias raras,
+  la due diligence (licencia + scripts) fue rápida porque el propio repo ya documenta su cadena de
+  licencias de terceros en `THIRD_PARTY_LICENSES.md`
+- Aprendizaje: al vendorizar código de un repo externo dentro de este repo (que es PÚBLICO), la
+  secuencia mínima antes de `git add` es: licencia compatible con redistribución (MIT/CC0 aquí),
+  lectura de cualquier script ejecutable en busca de red/`exec`/`subprocess`, y verificación de
+  integridad por hash contra el origen — no solo copiar y confiar en que "es de GitHub, será seguro"
+- Checkpoint: `dev` con 9 commits de esta sesión, todos pusheados. Nada en vuelo.
