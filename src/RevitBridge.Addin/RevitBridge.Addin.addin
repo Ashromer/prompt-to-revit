@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!--
+  Plantilla de manifiesto de RevitBridge.Addin (F0.4). NO se copia automáticamente: es
+  verificación en Revit vivo y la hace el usuario (CLAUDE.md, "Qué significa verificado aquí").
+
+  Pasos manuales:
+    1. Compilar en Debug o Release con Revit CERRADO (el DLL queda bloqueado con Revit abierto).
+    2. Copiar este fichero a %APPDATA%\Autodesk\Revit\Addins\2026\RevitBridge.addin.
+    3. Editar <Assembly> más abajo con la ruta ABSOLUTA al RevitBridge.Addin.dll compilado, p. ej.
+       D:\...\src\RevitBridge.Addin\bin\Debug\net8.0-windows\RevitBridge.Addin.dll
+    4. Abrir Revit 2026. El FullClassName debe coincidir EXACTAMENTE con namespace.ClassName
+       (RevitBridge.Addin.App) o Revit no carga el addin sin más aviso.
+-->
+<RevitAddIns>
+  <AddIn Type="Application">
+    <Name>RevitBridge</Name>
+    <Assembly>RevitBridge.Addin.dll</Assembly>
+    <AddInId>3f1a9c2e-8b4d-4a6f-9e2a-7c5d1b3e6f90</AddInId>
+    <FullClassName>RevitBridge.Addin.App</FullClassName>
+    <VendorId>RVBR</VendorId>
+    <VendorDescription>RevitBridge, pasarela de modelado por prompt</VendorDescription>
+  </AddIn>
+</RevitAddIns>

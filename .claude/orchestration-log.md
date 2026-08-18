@@ -73,6 +73,47 @@ Formato por entrada — una por lote/feature cerrado, añadida por quien orquest
 - Skipped: `tester` como agente separado (build+test ya verificados directamente por el orquestador
   antes de pasar a `judge`; evitó un arranque en frío más para un lote de solo scaffolding)
 
+## [2026-08-18] Lote B Tier 0 — CERRADO, build+test verde (judge diferido)
+
+- Agentes usados: `revit-developer` (único), lanzado en segundo plano
+- Alcance: F0.3 (`PipeServer`/`PipeClient` sobre named pipe con ACL de usuario, framing con
+  longitud + JSON), F0.4 (`App : IExternalApplication`, arranque/parada del pipe en `OnStartup`/
+  `OnShutdown`, `.addin` de plantilla), F0.5 (`ExecutionQueue` + `ExecutionQueueEventHandler` vía
+  `ExternalEvent`, encolar→esperar→responder con placeholder de eco), F0.9 (`CommandCatalog` por
+  reflexión sobre `[ComandoRevit]`, falla al arrancar con nombres duplicados)
+- Igual que Lote A: **sin Bash disponible en el entorno del agente**, solo revisión manual. El
+  orquestador compiló directamente y encontró 3 fallos reales:
+  1. Debug: `IOException` inaccesible en `PipeServer.cs` — el proyecto tiene
+     `UseWindowsForms=true`, cuyo `ImplicitUsings` **no** incluye `System.IO` global (solo
+     `System.Drawing`/`System.Windows.Forms`), a diferencia de un proyecto de consola. Fix: `using
+     System.IO;` explícito.
+  2. Debug: `TaskDialog` ambiguo entre `Autodesk.Revit.UI` y `System.Windows.Forms` en `App.cs`
+     (misma causa: `UseWindowsForms=true` trae `System.Windows.Forms` global). Fix: cualificar
+     `Autodesk.Revit.UI.TaskDialog`.
+  3. Tests (4/56 fallando): `PeticionPipe.Datos` con `default(JsonElement)` (`ValueKind.Undefined`)
+     lanza `InvalidOperationException` al serializar — bug real de diseño, no solo de test: **toda**
+     petición sin payload (`/exec` sin datos extra, etc.) habría roto en producción igual. Fix:
+     `JsonElementOrNullConverter` nuevo en `Core`, aplicado a la propiedad `Datos`, escribe `null`
+     cuando `ValueKind.Undefined`. Tras el fix: Debug y Release limpios, `dotnet test` 56/56 verde
+- Qué falló o costó más de lo esperado: el bug de `JsonElement.Undefined` no lo habría cazado
+  `judge` (no es code review, es un fallo de runtime que solo sale al ejecutar) — confirma que
+  `tester`/build real por el orquestador sigue siendo el paso que de verdad atrapa regresiones,
+  no la relectura de diseño
+- Aprendizaje: **`UseWindowsForms=true` cambia el set de `ImplicitUsings` globales** (pierde
+  `System.IO`, gana `System.Drawing`/`System.Windows.Forms`) — cualquier addin de Revit con WinForms
+  activado no puede asumir los usings implícitos de un proyecto de consola estándar. Añadir esta
+  nota a `revit_api_knowledge.md` si se repite en otro proyecto
+- `judge`: **DIFERIDO** — cierre bajo instrucción explícita del usuario de pushear antes de agotar
+  tokens de la sesión. Commit+push hechos con build Debug+Release limpio y 56/56 tests verdes
+  (nivel 1 y 2 de "qué significa verificado" cumplidos), pero sin pasada formal de `judge` contra
+  el checklist de §5. Pendiente explícito para la próxima sesión antes de dar Lote B por
+  completamente cerrado y arrancar Lote C
+- Checkpoint: build+test verdes y pusheado, pero **no** es el mismo punto de seguridad que un PASS
+  de `judge` — revisar con `judge` (§5, especialmente R2/`ExternalEvent` y aislamiento del canal)
+  antes de construir Lote C encima
+- Skipped: `judge` (ver arriba, diferido por tokens, no por decisión de diseño); `architect` (sin
+  decisión de diseño abierta, igual que Lote A)
+
 ## [2026-08-18] Effort por agente en frontmatter — optimización de tokens del orquestador
 
 - Agentes usados: ninguno (trabajo de proceso, directo en la conversación principal)

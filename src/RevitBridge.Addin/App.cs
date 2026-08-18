@@ -1,0 +1,58 @@
+using Autodesk.Revit.UI;
+using RevitBridge.Addin.Bridge;
+using RevitBridge.Utils;
+
+namespace RevitBridge.Addin;
+
+/// <summary>
+/// Punto de entrada del addin (F0.4). <c>OnStartup</c> es el único momento con contexto de API
+/// válido para <c>ExternalEvent.Create</c> (DOCUMENTACION.md §5.B.5); arranca ahí la cola de
+/// ejecución y, en su propio hilo, el servidor del pipe. El listener del pipe (<see cref="PipeServer"/>)
+/// nunca toca la API de Revit — solo conoce <see cref="ExecutionQueue"/> a través de
+/// <c>IPeticionExecutor</c>. El <c>FullClassName</c> del <c>.addin</c> debe ser exactamente
+/// <c>RevitBridge.Addin.App</c>.
+/// </summary>
+public sealed class App : IExternalApplication
+{
+    private ExecutionQueue? _cola;
+    private ExternalEvent? _externalEvent;
+    private PipeServer? _pipeServer;
+
+    public Result OnStartup(UIControlledApplication application)
+    {
+        try
+        {
+            // Falla pronto si hay nombres de comando duplicados en el catálogo (ADR-005), en vez
+            // de descubrirlo la primera vez que alguien pida /commands.
+            CommandCatalog.Descubrir(typeof(ComandoRevitAttribute).Assembly);
+
+            _cola = new ExecutionQueue();
+            var handler = new ExecutionQueueEventHandler(_cola);
+            _externalEvent = ExternalEvent.Create(handler);
+            _cola.PeticionEncolada += () => _externalEvent?.Raise();
+
+            var nombrePipe = Environment.GetEnvironmentVariable("REVITBRIDGE_PIPE");
+            if (string.IsNullOrWhiteSpace(nombrePipe))
+            {
+                nombrePipe = PipeServer.NombrePorDefecto();
+            }
+
+            _pipeServer = new PipeServer(nombrePipe, _cola);
+            _pipeServer.Iniciar();
+
+            return Result.Succeeded;
+        }
+        catch (Exception ex)
+        {
+            Autodesk.Revit.UI.TaskDialog.Show("RevitBridge", $"No se pudo arrancar RevitBridge: {ex.GetType().Name}: {ex.Message}");
+            return Result.Failed;
+        }
+    }
+
+    public Result OnShutdown(UIControlledApplication application)
+    {
+        _pipeServer?.Dispose();
+        _externalEvent?.Dispose();
+        return Result.Succeeded;
+    }
+}
