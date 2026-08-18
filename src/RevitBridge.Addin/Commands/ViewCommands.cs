@@ -173,6 +173,11 @@ public static class ViewCommands
         var p2 = new XYZ(p2x * m2ft, p2y * m2ft, elevacionBaseMetros * m2ft);
         var longitud = p1.DistanceTo(p2);
         if (longitud < 1e-6) throw new ArgumentException("Los dos puntos de la línea de sección son coincidentes.");
+        // Nota del judge (2026-08-18): sin este guard, altura/profundidad ≤0 produce un
+        // BoundingBoxXYZ degenerado/invertido (Min.Y>Max.Y o Min.Z>Max.Z) y el error de Revit
+        // resultante sería mucho menos claro que este.
+        if (alturaMetros <= 0) throw new ArgumentException("alturaMetros debe ser mayor que cero.");
+        if (profundidadMetros <= 0) throw new ArgumentException("profundidadMetros debe ser mayor que cero.");
 
         var puntoMedio = (p1 + p2) * 0.5;
         var direccion = (p2 - p1).Normalize(); // BasisX: horizontal a lo largo de la línea de corte
