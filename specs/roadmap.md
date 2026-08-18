@@ -4,7 +4,7 @@
 > | **Status** | 🟡 Draft |
 > | **Owner** | Usuario único, arquitecto y desarrollador de plugins de Revit |
 > | **Created** | 2026-08-17 |
-> | **Updated** | 2026-08-17 |
+> | **Updated** | 2026-08-18 |
 > | **Version** | v0.1 |
 > | **Parent specs** | [[product-spec]] · [[tech-spec]] |
 > | **Scope** | Fase 0 de 2 PoCs bloqueantes, más tres tiers de features de complejidad creciente hasta el ciclo de graduación cerrado |
@@ -77,19 +77,19 @@ Ninguno de los dos lleva estimación: el TechSpec no las incluye y no se inventa
 - **Closing decision** — Resuelve **ADR-001, confirmado**. Peldaño 1 de la escalera de 3 (ver `plan.md` del PoC): SDK estable y completo, se usa tal cual. ADR-004 no se toca.
 - **Output** — Proyecto del PoC en el repo (desechable, FR-010), `ModelContextProtocol` 2.2.0 y `Microsoft.Extensions.Hosting` 8.0.0 anotados en el Tech Stack y Dependencies del [[tech-spec]], y el Discovery correspondiente cerrado.
 
-### PoC #2 — Paquete NuGet de metadatos de la API de Revit `[P]`
+### PoC #2 — Paquete NuGet de metadatos de la API de Revit `[P]` — ✅ CERRADO, ADR-008 confirmado
 
 - **Issue** — —
 - **Hypothesis** — Existe un paquete NuGet de solo metadatos que cubre la API de Revit 2026 completa y permite compilar el addin en una máquina sin Revit instalado, produciendo un DLL que Revit 2026 carga igual que uno compilado contra las DLL locales.
 - **Functional design** — Un addin trivial, un `IExternalApplication` que añade un botón al ribbon, compilado dos veces: una contra el paquete NuGet y otra contra las DLL de `C:\Program Files\Autodesk\Revit 2026\`. Comparar que ambos cargan y funcionan. *(inferido)*
 - **Setup** — Una máquina con Revit 2026 para la comparación y la carga, y un entorno sin Revit, un runner de CI o un contenedor, para verificar que la compilación no lo necesita.
-- **Success criteria**
-  - El addin compila en Debug y Release sin Revit instalado
-  - El DLL resultante carga en Revit 2026 y el botón funciona
-  - Están disponibles los ensamblados que el proyecto necesita, como mínimo `RevitAPI` y `RevitAPIUI`
-  - Un workflow de CI compila y pasa los tests sin Revit
-- **Closing decision** — Resuelve **ADR-008**. Si falla, se cae a referencia por ruta local, desaparece el CI, y la distribución a terceros exige que quien compile tenga Revit instalado.
-- **Output** — Nombre y versión del paquete anotados en Tech Stack y Dependencies del [[tech-spec]], workflow de CI funcionando, y el Discovery correspondiente cerrado.
+- **Success criteria** — compilación sin Revit verificada por el run de CI (la máquina de desarrollo tiene Revit y no puede probarlo); carga en Revit vivo verificada y anotada por el usuario en `pocs/002-poc-2-paquete-nuget-metadatos-api-revit/GUION-VERIFICACION.md`; veredicto en `VEREDICTO.md`:
+  - ✅ El addin compila en Debug y Release sin Revit instalado (SC-001) — run `windows-latest` en verde
+  - ✅ El DLL resultante carga en Revit 2026 y el botón funciona (SC-002) — equivalencia con el build local confirmada campo por campo, veredicto "Equivalente"
+  - ✅ Están disponibles los ensamblados que el proyecto necesita, como mínimo `RevitAPI` y `RevitAPIUI` (SC-003) — `dotnet list package`, más el uso real de tipos de ambos en el código compilado
+  - ✅ Un workflow de CI compila y pasa los tests sin Revit (SC-004) — los tres pasos (build Debug, build Release, `dotnet test` 3/3) en verde
+- **Closing decision** — Resuelve **ADR-008, confirmado**. No se activa FR-009: no se cae a referencia por ruta local y el CI de compilación se mantiene. Salvedad conocida y asumida: el paquete es "solo metadatos" por empaquetado (`ref/` sin `lib/`), no por contenido binario — reevaluar antes de declarar la distribución a terceros como objetivo con compromiso (`RECONOCIMIENTO.md` §12).
+- **Output** — `Nice3point.Revit.Api.RevitAPI` + `Nice3point.Revit.Api.RevitAPIUI`, versión fija `[2026.4.10]`, anotados en Tech Stack y Dependencies del [[tech-spec]]; workflow de CI funcionando en `.github/workflows/poc2-build.yml`, run de referencia [32069521493](https://github.com/Ashromer/prompt-to-revit/actions/runs/32069521493); Discovery correspondiente cerrado. Proyecto del PoC desechable (FR-010), en `pocs/002-poc-2-paquete-nuget-metadatos-api-revit/`.
 
 > [!info] Paralelización
 > Los dos PoCs son independientes: tocan stacks distintos, no comparten código y ninguno consume la salida del otro. El #1 no necesita Revit y el #2 no necesita MCP, así que pueden ejecutarse a la vez. El gate de la Fase 0 exige los dos cerrados porque Tier 0 arranca el monorepo con las dos decisiones ya tomadas, y rehacer la estructura después es más caro que esperar.
@@ -212,11 +212,26 @@ Todas simultáneamente:
   2.2.0. Ver `pocs/001-poc-1-sdk-oficial-de-mcp-para-net/VEREDICTO.md`.
 - ~~Peldaño 2 (implementación propia en C#)~~ — no se activó, el peldaño 1 cerró en positivo
 - ~~Revertida a Node~~ — no se activó
-- [ ] PoC #2 cerrado, o ADR-008 revertido a referencia por ruta local (si PoC #2 no encuentra paquete NuGet de metadatos) — **pendiente, siguiente trabajo**
-- [x] Nombre y versión exactos del paquete del SDK de MCP anotados en el Tech Stack y en Dependencies del [[tech-spec]] (`ModelContextProtocol` 2.2.0, `Microsoft.Extensions.Hosting` 8.0.0); pendientes los del PoC #2 (`Microsoft.CodeAnalysis.CSharp` y el paquete de metadatos de la API de Revit)
-- [x] Discovery del SDK de MCP marcado como resuelto en [[tech-spec]]; pendiente el Discovery del paquete de metadatos de la API de Revit (bloqueado por el PoC #2)
+- [x] **PoC #2 cerrado en positivo, ADR-008 confirmado.** Sus cuatro criterios cumplidos: SC-001 y
+  SC-004 por el run de CI en un runner `windows-latest` sin Revit
+  ([32069521493](https://github.com/Ashromer/prompt-to-revit/actions/runs/32069521493)), SC-002
+  verificado por el usuario en Revit 2026 vivo con veredicto de equivalencia frente al build local,
+  SC-003 por inspección de las referencias resueltas. No se activa FR-009: **no** se revierte a
+  referencia por ruta local y el CI de compilación se mantiene.
+  Ver `pocs/002-poc-2-paquete-nuget-metadatos-api-revit/VEREDICTO.md`.
+- [x] Nombre y versión exactos anotados en el Tech Stack y en Dependencies del [[tech-spec]]: del PoC #1,
+  `ModelContextProtocol` 2.2.0 y `Microsoft.Extensions.Hosting` 8.0.0; del PoC #2,
+  `Nice3point.Revit.Api.RevitAPI` y `Nice3point.Revit.Api.RevitAPIUI` `[2026.4.10]`.
+  `Microsoft.CodeAnalysis.CSharp` sigue en `TBD`. **La redacción anterior de este ítem lo listaba
+  entre los pendientes del PoC #2**; se rescopa a **F1.2** porque el `requirements.md` del PoC #2 no
+  lo cubre en ningún FR ni SC (FR-007/FR-008 y SC-005 hablan solo del paquete de metadatos de la API
+  de Revit) y ninguna feature de Tier 0 lo necesita antes de F1.2. **Rescope ratificado por el
+  usuario el 2026-08-18.**
+- [x] Discovery del SDK de MCP marcado como resuelto en [[tech-spec]]; **Discovery del paquete de
+  metadatos de la API de Revit también cerrado** con la decisión tomada (FR-007, FR-008 del PoC #2)
 
-**Estado del gate: 1 de 2 PoCs cerrado. No se abre Tier 0 hasta que el PoC #2 también cierre.**
+**Estado del gate: ✅ CUMPLIDO. Los 2 PoCs bloqueantes están cerrados en positivo (ADR-001 y ADR-008
+confirmados) y las dos decisiones estructurales están tomadas. Tier 0 puede arrancar por F0.1.**
 
 ### Gate Tier 0 → Tier 1
 

@@ -1,0 +1,25 @@
+name: PoC 2 - Build y tests (paquete NuGet de metadatos)
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Build PocRevitAddin.Nuget (Debug)
+        run: dotnet build pocs/002-poc-2-paquete-nuget-metadatos-api-revit/PocRevitAddin.Nuget/PocRevitAddin.Nuget.csproj -c Debug
+
+      - name: Build PocRevitAddin.Nuget (Release)
+        run: dotnet build pocs/002-poc-2-paquete-nuget-metadatos-api-revit/PocRevitAddin.Nuget/PocRevitAddin.Nuget.csproj -c Release
+
+      - name: Test PocRevitAddin.Tests
+        run: dotnet test pocs/002-poc-2-paquete-nuget-metadatos-api-revit/PocRevitAddin.Tests/PocRevitAddin.Tests.csproj

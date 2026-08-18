@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>PocRevitAddin.Tests</RootNamespace>
+    <AssemblyName>PocRevitAddin.Tests</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Sin RevitAPI/RevitAPIUI ni el paquete de metadatos: este proyecto testea solo la clase de
+         C# puro de esta misma carpeta (AddinMetadata.cs), no PocRevitAddin.Nuget.csproj ni
+         PocRevitAddin.Local.csproj (FR-010). -->
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+
+</Project>
