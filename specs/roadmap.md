@@ -248,6 +248,12 @@ Una vez completado el puente seguro (Tier 1) y el catálogo precompilado con sal
 >   piden aprobación con previsualización antes de crear. Prerrequisito que las dos sesiones
 >   paralelas de `architect` (CAD/DXF y PDF/VLM) señalaron de forma independiente. Detalle en
 >   `.claude/orchestration-log.md`.
+> - **2026-08-18, F3.2a (CAD) y F3.2b (PDF/VLM) implementadas a nivel 1-2**: `RevitBridge.CadIngest`
+>   (proyecto nuevo, `ACadSharp`, DXF y DWG) con `cad_list_layers`/`cad_calibrate_scale`/
+>   `cad_extract_geometry` como herramientas MCP. F3.2b no necesitó código de producto (per
+>   ADR-013): el procedimiento de anclaje de escala + muro de prueba antes del lote se documentó en
+>   `.claude/skills/revit-bridge/SKILL.md`. Pendiente de los dos: verificación en Revit vivo contra
+>   ficheros/planos reales, y el spike no bloqueante contra un DWG de terceros (D1 del ADR-012).
 
 ### Backlog de catálogo — "casa completa" (2026-08-18)
 

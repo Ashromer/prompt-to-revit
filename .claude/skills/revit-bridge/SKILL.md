@@ -9,6 +9,14 @@ description: Disciplina de uso de la pasarela PROMPT_TO_REVIT — modelar y cons
 > y `~/.claude/revit_knowledge/revit_api_knowledge.md` (verdad operativa de la API). No dupliques
 > reglas aquí; esta skill es el procedimiento, no el reglamento.
 
+## Paso 0 — Contexto denso al empezar a trabajar sobre un documento (ADR-011, F3.1)
+
+Antes de la primera consulta puntual en una sesión de trabajo sobre un documento, invoca
+`run_command` con `ExportarContextoMasivo` y `ExportarGrafoTopologico`. Es lectura pura (auto-
+aprobado), y evita descubrir niveles, hojas, inventario por categoría y el grafo puerta-habitación
+a base de preguntas sueltas. No hace falta repetirlo dentro de la misma sesión salvo que el usuario
+avise de un cambio grande en el modelo.
+
 ## La escalera. En este orden, siempre
 
 **1. `/query` antes de nada.** Nunca escribas un nombre de tipo, familia, nivel o material a mano
@@ -62,7 +70,8 @@ Reglas del código que generes:
 | Operación | Aprobación |
 |---|---|
 | `query`, `commands`, `compile` | automática siempre |
-| `exec` en ámbito de sesión | manual por defecto (con opción "confiar 30 min") |
+| `exec` | **manual siempre en la v1.** No existe "confiar durante N minutos" — se descartó a propósito (DOCUMENTACION.md §5.D.15): mientras el sistema no se demuestre, la revisión humana no debe tener agujeros |
+| Creación masiva (`CrearMurosMasivo`, `CrearForjadosMasivo`, `CrearAberturasMasivo`, `ColocarMobiliarioMasivo`, tejados) | **manual siempre**, con resumen de cuántos elementos y dónde — no es específico de VLM/CAD, es la misma salvaguarda que aplica a cualquier lote grande |
 | Borrar o modificar preexistentes | **siempre manual**, sin excepción |
 
 La ventana del addin muestra el C# antes de ejecutarlo. Escribe el snippet para que **se lea**:
@@ -84,6 +93,45 @@ Varias excepciones de la API llegan con **`Message` vacío**: si el error no dic
 
 **Dos fallos seguidos en la misma operación = parar y preguntar.** No entres en bucle de reintentos
 contra el modelo del usuario.
+
+## Modelar desde un plano (CAD o PDF/imagen) — ADR-012 y ADR-013
+
+Dos vías distintas según la fuente, con la misma regla de fondo: **nunca generar el lote completo
+sin anclar la escala y sin que el usuario vea un resumen antes de que exista en el modelo.**
+
+### Desde CAD (DXF/DWG)
+
+1. `cad_list_layers(ruta)` — lista las capas con conteo de líneas/polilíneas/inserts. **No
+   adivines** qué capa es "muros" por el nombre a ciegas: confírmalo con el usuario en el chat si
+   hay ambigüedad (nombres de capa varían por despacho).
+2. `cad_calibrate_scale(ruta)` — si `confianza` no es `DesdeCabecera` (fichero `Unitless` o
+   unidades sin factor conocido), **pide al usuario la escala explícitamente** antes de seguir. No
+   asumas metros ni milímetros por defecto.
+3. `cad_extract_geometry(ruta, nombreCapa, factorAMetros)` — devuelve segmentos ya en metros, en el
+   formato que `CrearMurosMasivo` acepta directamente.
+4. Antes de invocar `CrearMurosMasivo`/`CrearForjadosMasivo`/`CrearAberturasMasivo` con el
+   resultado: dilo en el chat ("voy a crear N muros en el nivel X") — la ventana de aprobación del
+   addin lo exige igualmente, pero narrarlo antes ayuda al usuario a juzgar con contexto.
+5. Arcos de polilínea (bulge) se teselan automáticamente a ≤12° de barrido: el recuento de "muros
+   creados" no coincidirá con el recuento de segmentos del plano original si hay curvas — es
+   esperado, no un error.
+
+### Desde PDF o imagen (croquis, escaneo, foto de un plano)
+
+No hace falta ninguna herramienta especial de visión: interpreta la imagen directamente (ya tienes
+visión nativa), y genera el JSON de coordenadas a mano, con este orden obligatorio:
+
+1. **Ancla la escala primero.** Busca una cota legible en el plano (acotación o escala gráfica). Si
+   no hay ninguna, pídesela al usuario — nunca infieras una escala absoluta solo de proporciones de
+   píxeles, es el modo de fallo más probable de todo el flujo.
+2. **Genera un solo muro de prueba** con `CrearMuroRecto` (no el batch) en la posición y longitud
+   que debería tener según el plano y la escala del paso 1.
+3. **El usuario lo compara visualmente** contra el plano antes de seguir. Si no coincide, corrige
+   la escala o la lectura del plano — no sigas adelante con un ancla que no se confirmó.
+4. Solo entonces, lanza el lote completo con `CrearMurosMasivo`/`CrearForjadosMasivo`.
+5. Un PDF con geometría vectorial real (no una imagen escaneada) es mejor candidato para la vía CAD
+   si se puede exportar a DXF/DWG — la interpretación visual es para cuando no hay otra opción, no
+   la vía por defecto si existe un fichero CAD real detrás.
 
 ## Antes de empezar a trabajar
 
