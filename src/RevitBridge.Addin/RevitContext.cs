@@ -3,6 +3,7 @@ using System.Text.Json;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using RevitBridge.Core;
+using System.Reflection;
 
 namespace RevitBridge.Addin;
 
@@ -247,6 +248,51 @@ public sealed class RevitContext : IRevitQueryContext
             }
         }
         
+        else if (peticion.Operacion == Operaciones.Command)
+        {
+            var req = peticion.Datos.Deserialize<CommandRequest>(new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            if (req is null) throw new InvalidOperationException("El payload de CommandRequest es nulo.");
+
+            var assemblyUtils = typeof(Utils.ComandoRevitAttribute).Assembly;
+            var assemblyAddin = typeof(RevitContext).Assembly;
+            var metodos = new[] { assemblyUtils, assemblyAddin }
+                .SelectMany(a => a.GetTypes())
+                .SelectMany(t => t.GetMethods(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static))
+                .Where(m => m.GetCustomAttribute<Utils.ComandoRevitAttribute>()?.Nombre.Equals(req.Nombre, StringComparison.OrdinalIgnoreCase) == true)
+                .ToList();
+
+            if (metodos.Count == 0) throw new InvalidOperationException($"Comando '{req.Nombre}' no encontrado.");
+            var metodo = metodos.First();
+
+            var parameters = metodo.GetParameters();
+            var args = new object?[parameters.Length];
+            
+            for(int i = 0; i < parameters.Length; i++)
+            {
+                var p = parameters[i];
+                if (p.ParameterType == typeof(UIApplication)) { args[i] = _uiapp; continue; }
+                if (p.ParameterType == typeof(Document)) { args[i] = _doc; continue; }
+                
+                if (req.Argumentos is JsonElement argsDict && argsDict.ValueKind == JsonValueKind.Object && argsDict.TryGetProperty(p.Name ?? "", out var je))
+                {
+                    args[i] = JsonSerializer.Deserialize(je.GetRawText(), p.ParameterType);
+                }
+                else
+                {
+                    args[i] = p.HasDefaultValue ? p.DefaultValue : null;
+                }
+            }
+
+            try 
+            {
+                var resultado = metodo.Invoke(null, args);
+                return new RespuestaOperacion(Ok: true, Fase: Fase.Ok, Resultado: resultado, IdsCreados: Array.Empty<long>(), Error: null, Traza: null, DuracionMs: sw.ElapsedMilliseconds);
+            }
+            catch(Exception ex)
+            {
+                return new RespuestaOperacion(Ok: false, Fase: Fase.Runtime, Resultado: null, IdsCreados: Array.Empty<long>(), Error: ex.InnerException?.Message ?? ex.Message, Traza: ex.ToString(), DuracionMs: sw.ElapsedMilliseconds);
+            }
+        }
         else if (peticion.Operacion == Operaciones.Rollback)
         {
             var req = peticion.Datos.Deserialize<RollbackRequest>(new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
