@@ -153,4 +153,53 @@ public static class ViewCommands
 
         return new { Categoria = categoriaBuiltIn, Color = $"RGB({r},{g},{b})", ElementosAfectados = afectados };
     }
+
+    [ComandoRevit("CrearVistaSeccion")]
+    public static object CrearVistaSeccion(Document doc, double p1x, double p1y, double p2x, double p2y, double alturaMetros = 3.0, double profundidadMetros = 5.0, double elevacionBaseMetros = 0)
+    {
+        // F3.7, extensión "casa completa". Firma verificada con MetadataLoadContext:
+        // ViewSection.CreateSection(Document, ElementId viewFamilyTypeId, BoundingBoxXYZ sectionBox)
+        // es real en 2026.4.10. Geometría del sectionBox: patrón estándar del SDK de Revit (no
+        // probado en vivo -- es el comando de este lote con más riesgo geométrico; primer candidato
+        // a revisar si la sección sale mal orientada o recortada).
+        var viewFamilyType = new FilteredElementCollector(doc)
+            .OfClass(typeof(ViewFamilyType))
+            .Cast<ViewFamilyType>()
+            .FirstOrDefault(vft => vft.ViewFamily == ViewFamily.Section);
+        if (viewFamilyType == null) throw new InvalidOperationException("No se encontró ViewFamilyType para Section.");
+
+        double m2ft = 1.0 / 0.3048;
+        var p1 = new XYZ(p1x * m2ft, p1y * m2ft, elevacionBaseMetros * m2ft);
+        var p2 = new XYZ(p2x * m2ft, p2y * m2ft, elevacionBaseMetros * m2ft);
+        var longitud = p1.DistanceTo(p2);
+        if (longitud < 1e-6) throw new ArgumentException("Los dos puntos de la línea de sección son coincidentes.");
+
+        var puntoMedio = (p1 + p2) * 0.5;
+        var direccion = (p2 - p1).Normalize(); // BasisX: horizontal a lo largo de la línea de corte
+        var arriba = XYZ.BasisZ;               // BasisY: vertical del propio corte
+        var direccionVista = direccion.CrossProduct(arriba); // BasisZ: hacia dónde mira la sección
+
+        var transform = Transform.Identity;
+        transform.Origin = puntoMedio;
+        transform.BasisX = direccion;
+        transform.BasisY = arriba;
+        transform.BasisZ = direccionVista;
+
+        var sectionBox = new BoundingBoxXYZ { Transform = transform };
+        var mitadLongitud = longitud / 2.0;
+        var profundidadFt = profundidadMetros * m2ft;
+        var alturaFt = alturaMetros * m2ft;
+        sectionBox.Min = new XYZ(-mitadLongitud, 0, -profundidadFt);
+        sectionBox.Max = new XYZ(mitadLongitud, alturaFt, profundidadFt);
+
+        ViewSection? seccion = null;
+        using (var tx = new Transaction(doc, "Crear Vista Sección MCP"))
+        {
+            tx.Start();
+            seccion = ViewSection.CreateSection(doc, viewFamilyType.Id, sectionBox);
+            tx.Commit();
+        }
+
+        return new { Id = seccion!.Id.Value, Nombre = seccion.Name };
+    }
 }
