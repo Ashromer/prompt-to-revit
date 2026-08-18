@@ -87,7 +87,22 @@ public sealed class McpTools
         var peticion = new PeticionPipe(Operaciones.Command, payload);
 
         var respuesta = await _pipeClient.EnviarAsync(peticion, TimeSpan.FromSeconds(5), TimeSpan.FromMinutes(15), cancellationToken);
-        
+
+        return JsonSerializer.Serialize(respuesta, JsonOptions);
+    }
+
+    [McpServerTool(Name = "rollback", Title = "Deshacer lo creado en esta sesión")]
+    [Description("Borra los elementos que Claude ha creado en la sesion actual del bridge (ADR-006). Si no se pasan ids, reconstruye la lista completa desde el registro de sesion. Pide confirmacion manual en Revit con una previsualizacion de cuantos elementos y de que categorias antes de borrar.")]
+    public async Task<string> Rollback(
+        [Description("Ids explicitos a borrar (opcional). Si se omite o se deja vacio, se borra todo lo creado en la sesion actual.")] long[]? ids,
+        CancellationToken cancellationToken)
+    {
+        var req = new RollbackRequest(ids is { Length: > 0 } ? ids : null);
+        var payload = JsonSerializer.SerializeToElement(req);
+        var peticion = new PeticionPipe(Operaciones.Rollback, payload);
+
+        var respuesta = await _pipeClient.EnviarAsync(peticion, TimeSpan.FromSeconds(5), TimeSpan.FromMinutes(5), cancellationToken);
+
         return JsonSerializer.Serialize(respuesta, JsonOptions);
     }
 }

@@ -17,6 +17,13 @@ public sealed class App : IExternalApplication
     public static System.Windows.Threading.Dispatcher RevitDispatcher { get; private set; } = null!;
     public static System.Collections.Generic.HashSet<long> ElementosCreadosEnSesion { get; } = new();
 
+    /// <summary>
+    /// Identificador de esta sesión de Revit, generado una vez al arrancar. Es la clave de
+    /// correlación que usa <c>/rollback</c> (ADR-006) para reconstruir qué se creó leyendo el
+    /// JSONL, en vez de confiar en una lista en memoria del lado del puente.
+    /// </summary>
+    public static string SesionId { get; } = Guid.NewGuid().ToString("N");
+
     private ExecutionQueue? _cola;
     private ExternalEvent? _externalEvent;
     private PipeServer? _pipeServer;

@@ -195,6 +195,12 @@ public sealed class RevitContext : IRevitQueryContext
                     DuracionMs: sw.ElapsedMilliseconds);
             }
 
+            // c) Log ANTES de ejecutar (§5.D.17, ADR-006): si Revit cae a media ejecución, esta
+            // línea de "inicio" huérfana es la evidencia de qué se estaba intentando. También es
+            // la fuente que /rollback reconstruye después.
+            var sessionLog = new Bridge.SessionLog(Bridge.SessionLog.DirectorioPorDefecto());
+            var logId = sessionLog.IniciarEntrada(req.Intencion ?? "", "roslyn", req.Fuente, App.SesionId);
+
             // d) Ejecutar en transacción
             using (var tx = new Transaction(_doc, "Claude: " + (req.Intencion ?? "ejecución")))
             {
@@ -215,16 +221,22 @@ public sealed class RevitContext : IRevitQueryContext
                     var executeMethod = scriptType.GetMethod("Execute", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
                     if (executeMethod == null) throw new InvalidOperationException("No se encontró el método estático 'Execute(UIApplication)' en la clase 'Script'.");
 
-                    executeMethod.Invoke(null, new object[] { _uiapp });
+                    // El valor de retorno del script ES el contrato de §4 (`return new { ids = ... }`):
+                    // antes de esta corrección se descartaba y la respuesta siempre mandaba
+                    // ids_creados vacío y un string fijo, aunque el script sí hubiera creado geometría.
+                    var resultadoScript = executeMethod.Invoke(null, new object[] { _uiapp });
 
                     // g) Commit
                     tx.Commit();
 
+                    var idsCreados = ResultadoScriptExtractor.ExtraerIdsCreados(resultadoScript);
+                    sessionLog.CompletarEntrada(logId, Fase.Ok, resultadoScript, idsCreados, null, null, sw.ElapsedMilliseconds);
+
                     return new RespuestaOperacion(
                         Ok: true,
                         Fase: Fase.Ok,
-                        Resultado: "Ejecución finalizada con éxito.",
-                        IdsCreados: Array.Empty<long>(),
+                        Resultado: resultadoScript,
+                        IdsCreados: idsCreados,
                         Error: null,
                         Traza: null,
                         DuracionMs: sw.ElapsedMilliseconds);
@@ -236,12 +248,15 @@ public sealed class RevitContext : IRevitQueryContext
                         tx.RollBack();
                     }
 
+                    var errorMsg = ex.InnerException?.Message ?? ex.Message;
+                    sessionLog.CompletarEntrada(logId, Fase.Runtime, null, Array.Empty<long>(), errorMsg, ex.ToString(), sw.ElapsedMilliseconds);
+
                     return new RespuestaOperacion(
                         Ok: false,
                         Fase: Fase.Runtime,
                         Resultado: null,
                         IdsCreados: Array.Empty<long>(),
-                        Error: ex.InnerException?.Message ?? ex.Message,
+                        Error: errorMsg,
                         Traza: ex.ToString(),
                         DuracionMs: sw.ElapsedMilliseconds);
                 }
@@ -283,14 +298,28 @@ public sealed class RevitContext : IRevitQueryContext
                 }
             }
 
-            try 
+            // Log ANTES de invocar (§5.D.17 / ADR-006, mismo criterio que /exec). "via": "command"
+            // en vez de "roslyn" -- es lo que permite a F2.3 (cosecha del log) calcular el reparto
+            // Roslyn-vs-comando-compilado que el propio DOCUMENTACION.md §6 usa como señal de salud
+            // del catálogo. Antes de este fix, /command no escribía nada: esa señal era imposible de
+            // calcular porque faltaba la mitad de los datos.
+            var sessionLogComando = new Bridge.SessionLog(Bridge.SessionLog.DirectorioPorDefecto());
+            var logIdComando = sessionLogComando.IniciarEntrada(req.Nombre, "command", JsonSerializer.Serialize(req), App.SesionId);
+
+            try
             {
                 var resultado = metodo.Invoke(null, args);
-                return new RespuestaOperacion(Ok: true, Fase: Fase.Ok, Resultado: resultado, IdsCreados: Array.Empty<long>(), Error: null, Traza: null, DuracionMs: sw.ElapsedMilliseconds);
+                var idsCreadosComando = ResultadoScriptExtractor.ExtraerIdsCreados(resultado);
+                sessionLogComando.CompletarEntrada(logIdComando, Fase.Ok, resultado, idsCreadosComando, null, null, sw.ElapsedMilliseconds);
+
+                return new RespuestaOperacion(Ok: true, Fase: Fase.Ok, Resultado: resultado, IdsCreados: idsCreadosComando, Error: null, Traza: null, DuracionMs: sw.ElapsedMilliseconds);
             }
             catch(Exception ex)
             {
-                return new RespuestaOperacion(Ok: false, Fase: Fase.Runtime, Resultado: null, IdsCreados: Array.Empty<long>(), Error: ex.InnerException?.Message ?? ex.Message, Traza: ex.ToString(), DuracionMs: sw.ElapsedMilliseconds);
+                var errorMsgComando = ex.InnerException?.Message ?? ex.Message;
+                sessionLogComando.CompletarEntrada(logIdComando, Fase.Runtime, null, Array.Empty<long>(), errorMsgComando, ex.ToString(), sw.ElapsedMilliseconds);
+
+                return new RespuestaOperacion(Ok: false, Fase: Fase.Runtime, Resultado: null, IdsCreados: Array.Empty<long>(), Error: errorMsgComando, Traza: ex.ToString(), DuracionMs: sw.ElapsedMilliseconds);
             }
         }
         else if (peticion.Operacion == Operaciones.Rollback)
@@ -298,22 +327,65 @@ public sealed class RevitContext : IRevitQueryContext
             var req = peticion.Datos.Deserialize<RollbackRequest>(new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
             if (req is null) throw new InvalidOperationException("El payload de RollbackRequest es nulo.");
 
+            // ADR-006 / F1.9: por defecto se reconstruye desde el JSONL de la sesión, no de una
+            // lista en memoria del lado del puente -- así sobrevive a una caída de Revit, que es
+            // precisamente cuando más falta hace poder deshacer. Ids explícitos en la petición son
+            // un override manual (rollback parcial).
+            var sessionLog = new Bridge.SessionLog(Bridge.SessionLog.DirectorioPorDefecto());
+            IReadOnlyList<long> idsABorrar = (req.Ids is { Count: > 0 })
+                ? req.Ids
+                : sessionLog.ReconstruirIdsCreados(App.SesionId);
+
+            if (idsABorrar.Count == 0)
+            {
+                return new RespuestaOperacion(
+                    Ok: true,
+                    Fase: Fase.Ok,
+                    Resultado: "No hay elementos que revertir en esta sesión.",
+                    IdsCreados: Array.Empty<long>(),
+                    Error: null,
+                    Traza: null,
+                    DuracionMs: sw.ElapsedMilliseconds);
+            }
+
+            // §5.C.9 / F1.9: previsualización (cuántos, de qué categorías) y confirmación manual
+            // obligatoria antes de borrar -- el rollback anterior borraba directo, sin previsualizar.
+            var elementosAPrevisualizar = idsABorrar
+                .Select(idValue => _doc!.GetElement(ToElementId(idValue)))
+                .Where(e => e != null)
+                .ToList();
+
+            var categorias = elementosAPrevisualizar
+                .GroupBy(e => e!.Category?.Name ?? "Desconocido")
+                .Select(g => $"{g.Count()} de {g.Key}");
+            var resumen = $"ROLLBACK: vas a borrar {elementosAPrevisualizar.Count} elemento(s) creados en esta sesión:\n- "
+                + string.Join("\n- ", categorias);
+
+            var approval = new RevitBridge.Addin.UI.ApprovalService();
+            if (!approval.SolicitarAprobacion(resumen))
+            {
+                return new RespuestaOperacion(
+                    Ok: false,
+                    Fase: Fase.Runtime,
+                    Resultado: null,
+                    IdsCreados: Array.Empty<long>(),
+                    Error: "Rollback cancelado por el usuario.",
+                    Traza: null,
+                    DuracionMs: sw.ElapsedMilliseconds);
+            }
+
             using (var tx = new Transaction(_doc, "Claude: rollback"))
             {
                 tx.Start();
                 try
                 {
-                    if (req.Ids != null)
+                    var idsBorrados = new List<long>();
+                    foreach (var idValue in idsABorrar)
                     {
-                        foreach (var idValue in req.Ids)
+                        var borrados = _doc!.Delete(ToElementId(idValue));
+                        if (borrados != null)
                         {
-#if REVIT2024_OR_GREATER
-                            var elementId = new ElementId(idValue);
-#else
-                            // Asumiendo que idValue cabe en int (aunque idValue es long)
-                            var elementId = new ElementId((int)idValue);
-#endif
-                            _doc!.Delete(elementId);
+                            idsBorrados.AddRange(borrados.Select(i => (long)i.Value));
                         }
                     }
                     tx.Commit();
@@ -321,7 +393,7 @@ public sealed class RevitContext : IRevitQueryContext
                     return new RespuestaOperacion(
                         Ok: true,
                         Fase: Fase.Ok,
-                        Resultado: "Rollback ejecutado con éxito.",
+                        Resultado: $"Rollback ejecutado: {idsBorrados.Count} elemento(s) borrados.",
                         IdsCreados: Array.Empty<long>(),
                         Error: null,
                         Traza: null,
@@ -356,5 +428,14 @@ public sealed class RevitContext : IRevitQueryContext
         task.ContinueWith(_ => frame.Continue = false);
         System.Windows.Threading.Dispatcher.PushFrame(frame);
         return task.GetAwaiter().GetResult();
+    }
+
+    private static ElementId ToElementId(long idValue)
+    {
+#if REVIT2024_OR_GREATER
+        return new ElementId(idValue);
+#else
+        return new ElementId((int)idValue);
+#endif
     }
 }

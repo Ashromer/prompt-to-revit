@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Autodesk.Revit.DB;
+using RevitBridge.Core;
 using RevitBridge.Utils;
 
 namespace RevitBridge.Addin.Commands;
@@ -124,8 +125,8 @@ public static class ModelingCommands
         if (param == null) throw new ArgumentException($"El parámetro '{parametroNombre}' no existe en este elemento.");
         if (param.IsReadOnly) throw new InvalidOperationException($"El parámetro '{parametroNombre}' es de solo lectura.");
 
-        // F2.5 Protección de elementos preexistentes
-        if (!App.ElementosCreadosEnSesion.Contains(elementoId))
+        // F2.5 Protección de elementos preexistentes (helper compartido en Core: RevitBridge.Core.PreexistingElementGuard)
+        if (PreexistingElementGuard.RequiereAprobacion(new[] { (long)elementoId }, App.ElementosCreadosEnSesion))
         {
             var approval = new RevitBridge.Addin.UI.ApprovalService();
             if (!approval.SolicitarAprobacion($"ATENCIÓN: Vas a modificar el parámetro '{parametroNombre}' de un elemento preexistente (ID {elementoId}). ¿Aprobar?"))
@@ -181,13 +182,12 @@ public static class ModelingCommands
     {
         var ids = elementoIds.Select(id => new ElementId(id)).ToList();
         
-        // F2.4 Previsualización de borrado
+        // F2.4 Previsualización de borrado (helper compartido en Core: RevitBridge.Core.DeletionPreview)
         var elems = ids.Select(id => doc.GetElement(id)).Where(e => e != null).ToList();
         if (elems.Count > 0)
         {
-            var categorias = elems.GroupBy(e => e.Category?.Name ?? "Desconocido").Select(g => $"{g.Count()} de {g.Key}");
-            var resumen = $"ATENCIÓN: Vas a borrar {elems.Count} elementos preexistentes:\n- " + string.Join("\n- ", categorias);
-            
+            var resumen = DeletionPreview.ConstruirResumen("borrar", elems.Select(e => e!.Category?.Name ?? "Desconocido"));
+
             var approval = new RevitBridge.Addin.UI.ApprovalService();
             if (!approval.SolicitarAprobacion(resumen))
                 throw new InvalidOperationException("Borrado masivo cancelado por el usuario.");

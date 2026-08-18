@@ -140,6 +140,124 @@ Formato por entrada — una por lote/feature cerrado, añadida por quien orquest
   la precedencia query→command→compile→exec)
 - Checkpoint: cambio de proceso cerrado, nada en vuelo — punto seguro para `/clear` si se quiere
 
+## [2026-08-18] Auditoría de Tier 1/2/3 (trabajo de otra CLI) y corrección de 5 hallazgos críticos
+
+- Agentes usados: ninguno (auditoría y fix directos en la conversación principal)
+- Contexto: entre sesiones, otra CLI (Antigravity/Gemini) implementó Tier 1, Tier 2 y el arranque
+  de Tier 3 sin pasar por `specify → plan` (no hay carpetas `specs/00N-*` para esos tiers) y sin
+  dejar ninguna entrada en este log. Se pidió auditoría pura de qué se hizo, qué se saltó y la
+  implicación real de cada salto
+- Alcance de la auditoría: lectura completa de `RevitContext.cs`, `SyntaxGuard.cs`,
+  `ApprovalService.cs`/`ApprovalWindow.xaml.cs`, `McpTools.cs`, todo `Commands/*.cs`, `App.cs`,
+  `SessionLog.cs`, más build Debug+Release y `dotnet test` (69/69 antes de tocar nada). Sin Revit
+  — nivel 1 y 2 de "qué significa verificado" únicamente
+- Hallazgos 🔴 (verificados leyendo código, no hipotéticos) y su fix:
+  1. `SessionLog` (F0.7) nunca se llamaba desde `/exec` — el JSONL de ADR-006 estaba siempre vacío.
+     Fix: `RevitContext.Procesar` (rama Exec) llama `IniciarEntrada` antes de `tx.Start()` y
+     `CompletarEntrada` en éxito y en catch
+  2. `/rollback` no reconstruía desde el JSONL (ADR-006): tomaba ids directos de la petición, sin
+     previsualización. Fix: por defecto usa `SessionLog.ReconstruirIdsCreados(App.SesionId)` (ids
+     explícitos en la petición quedan como override), y pide aprobación con resumen de cuántos
+     elementos/categorías antes de borrar, igual que F2.4. Añadido `App.SesionId` (una vez por
+     arranque) y la herramienta MCP `rollback` en `McpTools.cs`, que no existía — el fix del lado
+     addin era inalcanzable desde Claude sin ella
+  3. El valor de retorno del script Roslyn (contrato §4, `return new { ids = ... }`) se descartaba:
+     `executeMethod.Invoke(...)` sin capturar el resultado, `Resultado` y `IdsCreados` siempre
+     fijos/vacíos. Fix: se captura el retorno, se manda tal cual en `Resultado`, y
+     `RevitBridge.Core.ResultadoScriptExtractor` (nuevo, testeable sin Revit) extrae `ids_creados`
+     de la propiedad `ids` del objeto devuelto
+  4. `SyntaxGuard` (F1.1) solo bloqueaba `doc.Delete`/`Document.Delete` por texto literal del
+     receptor — `var d = doc; d.Delete(id);` lo esquivaba, y no bloqueaba `System.IO`,
+     `System.Net`, `System.Diagnostics` (Process), `Environment.Exit` ni la vía de reflexión
+     (`GetMethod`+`Invoke`) pese a que DOCUMENTACION.md §5.A.3 los exige explícitamente. Fix:
+     reescrito para bloquear por NOMBRE DE MÉTODO (no por nombre de variable) más los cuatro
+     namespaces y el patrón de reflexión — sigue sin ser sonido contra ofuscación arbitraria, pero
+     cubre los vectores documentados
+  5. `ParamCommands.ModificarParametroTextoCategoria` modificaba parámetros de una categoría
+     entera de elementos preexistentes sin pedir aprobación, violando §5.C.10/§5.D.15 ("siempre
+     manual, sin excepción") — inconsistente con `ModelingCommands.ModificarParametro`, que sí la
+     tenía. Fix: misma comprobación contra `App.ElementosCreadosEnSesion` antes de tocar nada
+- Verificación: Debug y Release limpios, `dotnet test` 82/82 (69 preexistentes + 13 nuevos: 6
+  `SyntaxGuard`, 6 `ResultadoScriptExtractor`, 1 `McpTools.Rollback`). Un test nuevo falló en el
+  primer intento (`TryGetInt64` lanza en vez de devolver `false` sobre un elemento no-Number) y se
+  corrigió antes de reportar verde — evidencia real, no asumida
+- Qué falló o costó más de lo esperado: nada grave; el único fallo (`TryGetInt64`) se cazó en la
+  primera pasada de test porque se escribió el test antes de asumir el comportamiento de la API
+- Qué queda fuera de este fix (🟡, no crítico, documentado pero no tocado): `ApprovalService`
+  usa `Window.ShowDialog()` (modal) en vez de `Show()` (modeless) como pide §5.D.14 — necesita
+  verificación en Revit vivo, no se puede confirmar ni arreglar con certeza sin él. Tampoco se creó
+  CI para Tier 1/2/3 (solo existe `tier0-build.yml`), ni specs `00N-*` retroactivos para esos tiers
+- Aprendizaje: cuando otra CLI/agente cierra tiers enteros sin pasar por este log ni por `judge`,
+  la señal más fiable no es "compila y los tests pasan" (eso ya lo cumplía todo lo roto) sino leer
+  la capa de integración real (`RevitContext.cs` aquí) contra la lista explícita de salvaguardas de
+  DOCUMENTACION.md §5, punto por punto — los tests E2E existentes usaban un ejecutor falso que no
+  tocaba esa capa y por eso no detectaron nada
+- Checkpoint: fix cerrado y verificado a nivel 1-2, nada en vuelo. **No commiteado ni pusheado
+  todavía** — pendiente de confirmación del usuario antes de tocar git. Punto seguro para `/clear`
+  una vez se decida sobre el commit
+
+## [2026-08-18] Commit + PR del fix, y cierre de los gaps F2.1/F2.3 de Tier 2
+
+- Agentes usados: ninguno (directo en la conversación principal)
+- Contexto: usuario pidió "commitea y déjalo listo para PR mientras no interfiera con el proceso
+  de Antygravity". Antigravity seguía commiteando directo a `dev` en paralelo (apareció el commit
+  `c9fd482` entre una comprobación de `git log` y la siguiente, confirmado antes de tocar nada)
+- Commit del fix anterior (5 hallazgos): rama `fix/tier1-tier2-safeguard-gaps` creada desde `dev`
+  (con `c9fd482` ya incluido), `git add` archivo por archivo (nunca `add .`, para no arrastrar
+  nada de Antigravity), commit `81c666a`, push, PR #7 contra `dev`
+  (github.com/Ashromer/prompt-to-revit/pull/7). Checkout local devuelto a `dev` al terminar para
+  no dejar el working directory en mi rama
+- Segunda ronda, mismo turno: usuario pidió cerrar además los gaps F2.1/F2.3 que quedaron
+  documentados en la auditoría (`/command` no logueaba, cero tests E2E de Tier 2). Al volver a
+  `git checkout fix/tier1-tier2-safeguard-gaps` para continuar, apareció **`ModelingCommands.cs`
+  modificado sin commitear + carpeta nueva `tests/VLM Test 1/` sin trackear** — Antigravity tenía
+  edición en vivo, sin commitear, en el MISMO directorio de trabajo. El `checkout` no dio error
+  (los cambios no chocaban con el diff entre ramas) pero seguir editando ahí habría sido pisar
+  trabajo ajeno en tiempo real, no una simple divergencia de rama a resolver luego
+- Decisión: `git checkout dev` inmediato para devolver el directorio principal exactamente como
+  estaba (con el trabajo en vuelo de Antigravity intacto), y `git worktree add
+  .worktrees/fix-tier1-tier2-safeguard-gaps fix/tier1-tier2-safeguard-gaps` para seguir el fix en
+  una copia de trabajo completamente aparte — el repo ya tenía el patrón (`.worktrees/001-...`,
+  `.worktrees/002-...` de los PoCs), solo había que reutilizarlo
+- Fixes F2.1/F2.3 (en el worktree, sin tocar el directorio principal):
+  1. `/command` (rama `Operaciones.Command` de `RevitContext.Procesar`) tampoco llamaba a
+     `SessionLog` — mismo hallazgo que `/exec` pero no se había tocado en la primera ronda. Ahora
+     loguea con `via: "command"`, lo que hace calculable el reparto Roslyn-vs-comando-compilado
+     que `DOCUMENTACION.md` §6 usa como señal de salud del catálogo (antes de este fix esa cifra
+     era `command: 0` siempre, aunque el catálogo se usara)
+  2. Extraídos `RevitBridge.Core.PreexistingElementGuard` (decisión de si hace falta aprobación)
+     y `RevitBridge.Core.DeletionPreview` (texto de previsualización), ambos testeables sin Revit.
+     Refactorizados `ModelingCommands.BorrarElementosMasivo`, `ModelingCommands.ModificarParametro`
+     y `ParamCommands.ModificarParametroTextoCategoria` para compartirlos en vez de reimplementar
+     cada uno su propia comprobación — es exactamente el patrón que dejó a `ParamCommands` sin
+     protección en la ronda anterior
+  3. `Tier2EndToEndTests.cs`: test E2E que invoca un comando de prueba (sin tipos de Revit, mismo
+     mecanismo de despacho por atributo que `RevitContext.Procesar`) a través del puente completo
+     (McpTools → PipeClient → PipeServer → cola), cubriendo nombre coincidente y nombre que no
+     existe — cierra la parte de F2.1 del criterio de cierre de Tier 2 que es honesto testear sin
+     Revit
+  4. F2.3 (cosecha del log): construido un JSONL sintético de 9 ejecuciones (roslyn+command, un
+     candidato a graduar por repetición, una rotura de API recurrente, dos ruidos de un solo
+     intento) e invocada la skill `/harvest-bridge-log` de verdad contra él. Produjo un informe
+     correcto: candidato a graduar identificado, rotura de API agrupada por causa real (no por
+     texto), los dos ruidos descartados con motivo, y el reparto roslyn/command calculado por
+     primera vez de forma no trivial. No hay código que testear aquí (la skill es un procedimiento,
+     no C#), así que esto es la verificación honesta equivalente
+- Verificación: Debug y Release limpios en el worktree, `dotnet test` **91/91** (82 previos + 9
+  nuevos: 4 `PreexistingElementGuardTests`, 3 `DeletionPreviewTests`, 2 `Tier2EndToEndTests`)
+- Qué falló o costó más de lo esperado: nada en el código; lo que costó más fue darse cuenta a
+  tiempo de que el `checkout` había arrastrado trabajo sin commitear de Antigravity, antes de
+  escribir nada encima
+- Aprendizaje: cuando dos sesiones (dos CLIs, dos agentes) comparten el mismo working directory
+  sin coordinarse, **`git status` antes de cada `checkout`, no solo antes de operaciones
+  destructivas** — un `checkout` a una rama con ficheros sin commitear compatibles no da error y
+  parece seguro, pero puede arrastrar edición en vivo de otra sesión al espacio de trabajo activo.
+  Un `git worktree` aparte es la salida limpia en cuanto se detecta eso, y este repo ya tenía el
+  patrón establecido por los PoCs — reutilizarlo en vez de inventar otra convención
+- Checkpoint: PR #7 actualizada con estos commits (push pendiente de confirmar en el mensaje de
+  cierre de este turno). Nada en vuelo en el worktree. El directorio principal sigue en `dev`,
+  intacto, con el trabajo de Antigravity donde estaba
+
 ## [2026-08-18] Auditoría Tier 1/2/3 + fix (rama aparte) + sesión architect F3.1 + consolidación
 
 Nota: esta entrada resume una sesión larga cuyo detalle línea a línea vive en el historial de
