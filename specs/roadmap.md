@@ -186,6 +186,18 @@ Una vez completado el puente seguro (Tier 1) y el catálogo precompilado con sal
 
 **Criterio de cierre de Tier 3** — Un flujo E2E donde el usuario sube un croquis JPG a su interfaz de chat, el VLM lo analiza normativamente contra la Knowledge Base pre-cargada, y lanza cientos de llamadas silenciosas al catálogo C#, generando el esqueleto del edificio completo en segundos.
 
+## Tier 4: Headless & Batch Processing (Minería de Datos en la Sombra)
+
+El salto final hacia la automatización a escala empresarial. Permite a la IA indexar y extraer conocimiento de repositorios históricos completos sin la intervención de un usuario abriendo archivos manualmente.
+
+| Feature | Descripción | Dependencias | Notas |
+| :--- | :--- | :--- | :--- |
+| F4.1 | **Headless Revit Engine:** Creación de un *worker* en segundo plano que levante el motor de Revit sin interfaz gráfica (`revit.exe /headless` o equivalente) para procesar archivos silenciosamente. | F3.1 | Técnicamente el formato `.rvt` está cifrado y requiere el motor de Autodesk para su lectura completa. |
+| F4.2 | **Indexador de Directorios:** La IA recibe la ruta a un servidor (ej. `Z:/Proyectos_2025/`) y el MCP orquesta la apertura, extracción de Contexto Denso (F3.1) y cierre de cada `.rvt` en cadena, nutriendo una base de datos global de la oficina. | F4.1 | Permite consultas del tipo: *"Búscame todos los hospitales que hicimos el año pasado con puertas dobles"*. |
+| F4.3 | **Cloud Integration (APS / Forge):** Como alternativa al procesamiento local, derivar la extracción masiva de datos a Autodesk Platform Services mediante Webhooks, liberando la máquina local. | - | Desbloquea la lectura de archivos subidos a Autodesk Construction Cloud (BIM 360) sin descargarlos. |
+
+**Criterio de cierre de Tier 4** — El usuario pide a la IA que busque patrones de error en 50 proyectos antiguos; el sistema arranca un proceso en background que extrae la info de todos ellos sin que se abra una sola ventana de Revit, y presenta el reporte final.
+
 
 ## 🔗 Dependency Graph
 
