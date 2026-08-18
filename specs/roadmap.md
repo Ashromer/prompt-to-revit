@@ -241,6 +241,32 @@ Una vez completado el puente seguro (Tier 1) y el catálogo precompilado con sal
 >   por su propia sesión de `architect` — no agrupar como se agrupó Tier 0, son decisiones de
 >   diseño genuinamente distintas entre sí (dónde vive un vector store no es la misma decisión que
 >   qué cliente multimodal usar para VLM).
+> - **2026-08-18, base compartida corregida**: `CrearMurosMasivo` (Top Constraint) y
+>   `CrearForjadosMasivo` (FloorType por defecto) ya no son bugs conocidos a nivel 1-2, y ambos
+>   piden aprobación con previsualización antes de crear. Prerrequisito que las dos sesiones
+>   paralelas de `architect` (CAD/DXF y PDF/VLM) señalaron de forma independiente. Detalle en
+>   `.claude/orchestration-log.md`.
+
+### Backlog de catálogo — "casa completa" (2026-08-18)
+
+El usuario pidió expandir la biblioteca de comandos para no depender de pensar cada operación
+desde cero por Roslyn. Lo que falta para modelar una casa completa, más allá de muros/forjados/
+niveles ya cubiertos, con el enfoque de API ya bocetado para poder implementarse rápido cuando
+toque (verificar contra el paquete NuGet exacto antes de codificar, no asumir la firma):
+
+| Comando propuesto | Categoría Revit | Enfoque de API | Complejidad | Bloqueado por |
+|---|---|---|---|---|
+| `ObtenerTiposCargadosPorCategoria` | Cualquiera (query) | `FilteredElementCollector(doc).OfCategory(cat).WhereElementIsElementType()` — generalización de `BaseCommands.ObtenerElementosDeCategoria` pero para *tipos*, no instancias | Baja | — |
+| `CrearAberturasMasivo` (puertas/ventanas) | `OST_Doors`, `OST_Windows` | `doc.Create.NewFamilyInstance(location, familySymbol, hostWall, level, StructuralType.NonStructural)`. `location` = punto sobre la curva del muro host (`(host.Location as LocationCurve).Curve`, interpolar por distancia). `familySymbol.Activate()` si `!IsActive`. Ya nombrado así en el borrador de ADR-012/CAD — mantener el nombre | Media | `ObtenerTiposCargadosPorCategoria` (elegir tipo real, no adivinar nombre — §5.A.1) |
+| `BuscarTiposDeMuroPorFuncion` (para tabiques) | `WallType` | Filtrar por `BuiltInParameter.FUNCTION_PARAM` (Exterior/Interior/Cimentación/...). **No hace falta comando de creación nuevo** — `CrearMuroRecto` ya acepta `tipoMuroId`; solo falta añadir el mismo parámetro opcional a `CrearMurosMasivo` (hoy no lo tiene) | Baja | — |
+| `CrearTejadoExtrusion` (tejado a dos aguas/faldón simple) | `RoofType` | `doc.Create.NewExtrusionRoof(perfil2D, referencePlane, level, roofType, start, end)` — perfil 2D + dirección de extrusión, mucho más simple que la huella. Empezar por aquí, no por `FootPrintRoof` | Media-alta | Ninguno nuevo, pero es geometría no probada en este proyecto — spike antes de comprometerse |
+| `CrearTejadoPorHuella` (geometría real con pendientes por borde) | `RoofType` | `doc.Create.NewFootPrintRoof(curveArray, level, roofType, out ModelCurveArray)`, luego `SlopeAngle`/`DefinesSlope` por segmento del `ModelCurveArray` devuelto — **firma exacta a verificar contra el NuGet antes de codificar**, es la pieza más arriesgada del backlog | Alta | `CrearTejadoExtrusion` cerrado primero (aprender el patrón con la variante simple) |
+| `ColocarMobiliarioMasivo` | `OST_Furniture`, `OST_Casework`, `OST_SpecialityEquipment` | `doc.Create.NewFamilyInstance(location, symbol, level, StructuralType.NonStructural)` + `ElementTransformUtils.RotateElement` si hace falta rotación. Family-based, no host-based (a diferencia de puertas/ventanas) | Media | `ObtenerTiposCargadosPorCategoria` |
+| Carga de familias no incluidas en el proyecto (`doc.LoadFamily(ruta)`) | — | No es un comando de modelado, es una capacidad transversal que varios de los de arriba necesitarán si el usuario no tiene ya cargada la familia que hace falta | — | **Pregunta abierta, no resolver a la ligera**: ¿de dónde salen esas rutas? Fijarlas contradice R6 ("sin rutas fijas, sin supuestos sobre esta máquina"); pedirlas en cada llamada es más frágil. No es solo lectura de disco (eso no rompe la salvaguarda C.11, que es sobre el documento de Revit, no sobre recursos de familia) pero sí es superficie nueva — decidir antes de construir, no en el camino |
+
+**Orden recomendado** (más barato → más caro, y respetando dependencias): `ObtenerTiposCargadosPorCategoria` → `BuscarTiposDeMuroPorFuncion` + parámetro `tipoMuroId` en `CrearMurosMasivo` (tabiques, prácticamente gratis) → `CrearAberturasMasivo` → `ColocarMobiliarioMasivo` → resolver la pregunta de carga de familias → `CrearTejadoExtrusion` → `CrearTejadoPorHuella`.
+
+Cada uno por su ciclo normal (`revit-developer` + `judge`, sin `architect` salvo que al implementar aparezca una decisión de diseño no prevista aquí) — no agrupados en un solo lote: son API de Revit distintas entre sí (host-based vs. free-standing vs. roof sketching), el riesgo de implementación no es uniforme.
 
 ## Tier 4: Headless & Batch Processing (Minería de Datos en la Sombra)
 

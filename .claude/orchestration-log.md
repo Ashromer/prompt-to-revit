@@ -313,3 +313,68 @@ con este fichero en cuanto esa PR se mergee. Aquí solo el resumen y el paso fin
   usuario) y el borrador de ADR-011/plan de F3.1 (en el worktree del agente `architect`, esperando
   revisión del usuario antes de aplicarse a `specs/tech-spec.md`). Punto razonablemente seguro para
   `/clear` una vez se resuelvan esos dos pendientes
+
+## [2026-08-18] PR #7 mergeada, 2 sesiones architect en paralelo (CAD/DXF y PDF/VLM), fix de base compartido, backlog de catálogo
+
+- Agentes usados: 2× `architect` en paralelo (worktree aislado cada uno), sin `revit-developer`
+  para el fix (implementado directo, ver más abajo)
+- PR #7 mergeada con confirmación explícita del usuario. Conflicto real en `.claude/
+  orchestration-log.md` (ambas ramas habían añadido entradas al final) resuelto conservando las
+  dos, en orden cronológico — sin conflicto en ningún fichero de código, solo en este log. `dev`
+  post-merge: Debug+Release limpios, 91/91 tests
+- Usuario pidió explicar el borrador de F3.1 (ya cubierto en turno anterior) y "qué puede hacer ya
+  la herramienta" — resumen dado del catálogo actual, las 5 herramientas MCP, y las limitaciones
+  conocidas (sin `/compile` como herramienta separada, `ApprovalService` sin confirmar modeless)
+- Usuario: "necesito aumentar la biblioteca de capacidades... en una casa hay que colocar puertas,
+  ventanas, tejado, tabiques, mobiliario etc". Dos preguntas resueltas por `AskUserQuestion`:
+  CAD y PDF en paralelo (no secuencial), y cada uno con su propia sesión de `architect` antes de
+  código — ambas explícitas, no asumidas
+- **Sesión architect CAD/DXF** (worktree `agent-a01ea60d2b4420a6c`): hallazgo que invalida la
+  premisa con la que se lanzó la sesión ("DXF barato vs DWG caro") — ACadSharp (MIT, verificado
+  con WebSearch) lee DXF y DWG con la misma API, no hace falta pedir exportación a DXF. Confirmó
+  por lectura de código que no existe ningún comando de puertas/ventanas y que `CrearMurosMasivo`
+  no soporta arcos. Entregable: `ADR-012-ingesta-cad-dxf-dwg.md` + plan de 13 pasos (bugs
+  conocidos como prerrequisito explícito, spike no bloqueante contra fichero real primero)
+- **Sesión architect PDF/VLM** (worktree `agent-a07ae57a0f713abbb`): decisión que invalida la
+  redacción de F3.2 del roadmap — no hace falta integración multimodal nueva, la visión nativa de
+  Claude en la propia conversación basta; el "cliente MCP" del roadmap ya es Claude Code. Hallazgo
+  de seguridad verificado por lectura directa de código (no supuesto): `CrearMurosMasivo`/
+  `CrearForjadosMasivo` no llamaban a `ApprovalService` en ningún punto. Entregable: ADR-012
+  (numerado igual que el de CAD sin coordinación entre sesiones — pendiente reconciliar) + plan
+  con PoC conversacional de fiabilidad como primer paso
+- **Convergencia real entre las dos sesiones, ciegas entre sí**: ambas señalaron el mismo hallazgo
+  de seguridad (creación masiva sin aprobación) y la misma solución (extender
+  `DeletionPreview`+`ApprovalService`, sin operación de protocolo nueva) — señal fuerte de que es
+  un hallazgo real, no ruido de una sola lectura
+- **Fix de base implementado** (directo, sin `revit-developer` — diseño ya resuelto por las dos
+  sesiones, sin decisión abierta que justificara el fan-out): `CrearMurosMasivo` fija `Top
+  Constraint` (siguiente nivel por elevación, o altura desconectada explícita si no hay ninguno)
+  en vez de dejar la altura por defecto que causaba el solape conocido; `CrearForjadosMasivo`
+  resuelve un `FloorType` por defecto en vez de pasar `InvalidElementId` (que lanzaba una excepción
+  que un caller que descarta la respuesta, como `scratch/shoot.ps1`, veía como fallo silencioso), y
+  procesa cada polígono con su propio try/catch en vez de abortar el lote entero por uno inválido.
+  Ambos piden ahora previsualización + aprobación antes de crear. `DeletionPreview.ConstruirResumen`
+  generalizado en Core (ya no asume "elemento(s) preexistentes" en la plantilla — ese matiz lo
+  aporta el texto de "acción" del llamador) para poder reusarlo en creación sin texto engañoso, sin
+  romper los dos tests existentes que ya lo cubrían
+- Verificación: Debug+Release limpios, `dotnet test` 91/91 (sin regresión tras generalizar
+  `DeletionPreview`). Nivel 1-2 únicamente — nivel 3 (Revit vivo) pendiente del usuario
+- Backlog de catálogo añadido a `specs/roadmap.md` §Tier 3 ("casa completa"): 7 comandos/
+  capacidades (`ObtenerTiposCargadosPorCategoria`, `BuscarTiposDeMuroPorFuncion`+parámetro en
+  `CrearMurosMasivo`, `CrearAberturasMasivo`, `ColocarMobiliarioMasivo`, la pregunta abierta de
+  carga de familias desde disco, `CrearTejadoExtrusion`, `CrearTejadoPorHuella`), cada uno con
+  enfoque de API bocetado, complejidad relativa y dependencias, en orden barato→caro, para que
+  puedan implementarse sin otra ronda de investigación cuando toque — pedido explícito del usuario
+  ("recopila más acciones para poder ejecutar rápido")
+- Qué falló o costó más de lo esperado: nada; las dos sesiones de `architect` corrigieron premisas
+  con las que yo mismo las había lanzado (DXF-vs-DWG, necesidad de integración multimodal externa)
+  en vez de darlas por buenas — es exactamente el tipo de verificación que se espera de ellas
+- Aprendizaje: lanzar dos sesiones de `architect` en paralelo sobre el mismo problema desde ángulos
+  distintos (CAD vs PDF) sin que se vean entre sí produjo una convergencia útil (el mismo hallazgo
+  de seguridad, dos veces, de forma independiente) pero también un choque trivial de nomenclatura
+  (ambas usaron "ADR-012") — para la próxima vez, asignar el número de ADR de antemano en el prompt
+  en vez de dejar que cada sesión elija el siguiente libremente
+- Checkpoint: fix de base pendiente de commit+push en cuanto termine este turno. Dos borradores de
+  ADR-012 (CAD y PDF) en sus worktrees respectivos, sin aplicar a `tech-spec.md`, pendientes de que
+  el usuario decida cuál construir primero (o si de verdad quiere los dos en paralelo también en
+  implementación, no solo en diseño)
