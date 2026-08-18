@@ -40,19 +40,43 @@ public static class ModelingCommands
     }
 
     [ComandoRevit("CrearMurosMasivo")]
-    public static object CrearMurosMasivo(Document doc, int nivelId, string jsonCoordenadas)
+    public static object CrearMurosMasivo(Document doc, int nivelId, string jsonCoordenadas, double alturaMetros = 3.0)
     {
         // Vital para F3.2 (Modelado VLM): Recibe un JSON de 100 muros y los genera de golpe.
         var levelId = new ElementId(nivelId);
+        var nivelActual = doc.GetElement(levelId) as Level;
+        if (nivelActual == null) throw new ArgumentException("Nivel no encontrado.");
+
+        // Bug conocido (DOCUMENTACION.md §9, confirmado en Revit vivo): sin Top Constraint, Revit
+        // asigna una altura no conectada por defecto que invade los niveles superiores y los muros
+        // aparecen solapados. Preferir el siguiente nivel por elevación como restricción superior;
+        // si no hay ninguno por encima, usar altura desconectada explícita (alturaMetros).
+        var nivelSuperior = new FilteredElementCollector(doc)
+            .OfClass(typeof(Level))
+            .Cast<Level>()
+            .Where(l => l.Elevation > nivelActual.Elevation)
+            .OrderBy(l => l.Elevation)
+            .FirstOrDefault();
+
         double m2ft = 1.0 / 0.3048;
-        
+
         // Estructura esperada: [{"p1x":0,"p1y":0,"p2x":5,"p2y":0}, ...]
         var opciones = new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true };
         var listaMuros = System.Text.Json.JsonSerializer.Deserialize<List<Dictionary<string, double>>>(jsonCoordenadas, opciones);
-        
+
         if (listaMuros == null || listaMuros.Count == 0) return new { Creados = 0 };
 
+        // Salvaguarda nueva (hallazgo independiente de las dos sesiones de architect de ADR-012,
+        // CAD y PDF/VLM, 2026-08-18): creación masiva sin ningún punto de revisión humana rompe en
+        // espíritu §5.D.14. Previsualización + aprobación, mismo patrón que BorrarElementosMasivo.
+        var resumenCreacion = DeletionPreview.ConstruirResumen(
+            $"crear en el nivel '{nivelActual.Name}'", Enumerable.Repeat("Muro", listaMuros.Count));
+        var approvalCreacion = new RevitBridge.Addin.UI.ApprovalService();
+        if (!approvalCreacion.SolicitarAprobacion(resumenCreacion))
+            throw new InvalidOperationException("Creación masiva de muros cancelada por el usuario.");
+
         int creados = 0;
+        var idsCreados = new List<long>();
         using (var tx = new Transaction(doc, $"Batch Crear {listaMuros.Count} Muros (VLM)"))
         {
             tx.Start();
@@ -62,57 +86,115 @@ public static class ModelingCommands
                     coords.TryGetValue("p2x", out double p2x) && coords.TryGetValue("p2y", out double p2y))
                 {
                     Line geomLine = Line.CreateBound(new XYZ(p1x * m2ft, p1y * m2ft, 0), new XYZ(p2x * m2ft, p2y * m2ft, 0));
-                    Wall.Create(doc, geomLine, levelId, false);
+                    var wall = Wall.Create(doc, geomLine, levelId, false);
+
+                    if (nivelSuperior != null)
+                    {
+                        wall.get_Parameter(BuiltInParameter.WALL_HEIGHT_TYPE)?.Set(nivelSuperior.Id);
+                    }
+                    else
+                    {
+                        wall.get_Parameter(BuiltInParameter.WALL_USER_HEIGHT_PARAM)?.Set(alturaMetros * m2ft);
+                    }
+
                     creados++;
+                    idsCreados.Add(wall.Id.Value);
                 }
             }
             tx.Commit();
         }
 
-        return new { ElementosCreados = creados };
+        return new { ElementosCreados = creados, Ids = idsCreados };
     }
 
     [ComandoRevit("CrearForjadosMasivo")]
     public static object CrearForjadosMasivo(Document doc, int nivelId, string jsonCoordenadasPoligonos, int tipoSueloId = 0)
     {
         var levelId = new ElementId(nivelId);
-        var floorTypeId = tipoSueloId > 0 ? new ElementId(tipoSueloId) : ElementId.InvalidElementId;
+        var nivelActual = doc.GetElement(levelId) as Level;
+        if (nivelActual == null) throw new ArgumentException("Nivel no encontrado.");
+
+        // Bug conocido (DOCUMENTACION.md §9, confirmado en Revit vivo): pasar
+        // ElementId.InvalidElementId a Floor.Create lanza una excepción -- quien no revisa la
+        // respuesta del pipe (p. ej. un script que descarta la respuesta) lo ve como "no se genera
+        // nada" en silencio. Resolver un FloorType por defecto si no se especifica uno válido.
+        ElementId floorTypeId;
+        if (tipoSueloId > 0)
+        {
+            floorTypeId = new ElementId(tipoSueloId);
+        }
+        else
+        {
+            floorTypeId = new FilteredElementCollector(doc).OfClass(typeof(FloorType)).FirstElementId();
+            if (floorTypeId == ElementId.InvalidElementId)
+                throw new InvalidOperationException("No hay ningún FloorType disponible en el documento y no se especificó tipoSueloId.");
+        }
+
         double m2ft = 1.0 / 0.3048;
-        
+
         var opciones = new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true };
         // Estructura esperada: array de poligonos, cada poligono es array de puntos {"x":0,"y":0}
         var listaPoligonos = System.Text.Json.JsonSerializer.Deserialize<List<List<Dictionary<string, double>>>>(jsonCoordenadasPoligonos, opciones);
-        
+
         if (listaPoligonos == null || listaPoligonos.Count == 0) return new { Creados = 0 };
 
+        // Misma salvaguarda que CrearMurosMasivo (ver comentario arriba).
+        var resumenCreacion = DeletionPreview.ConstruirResumen(
+            $"crear en el nivel '{nivelActual.Name}'", Enumerable.Repeat("Forjado", listaPoligonos.Count));
+        var approvalCreacion = new RevitBridge.Addin.UI.ApprovalService();
+        if (!approvalCreacion.SolicitarAprobacion(resumenCreacion))
+            throw new InvalidOperationException("Creación masiva de forjados cancelada por el usuario.");
+
         int creados = 0;
+        var idsCreados = new List<long>();
+        var errores = new List<string>();
         using (var tx = new Transaction(doc, $"Batch Crear {listaPoligonos.Count} Forjados (VLM)"))
         {
             tx.Start();
             foreach (var poligono in listaPoligonos)
             {
-                if (poligono.Count >= 3)
+                if (poligono.Count < 3) continue;
+
+                var curveLoop = new CurveLoop();
+                for (int i = 0; i < poligono.Count; i++)
                 {
-                    var curveLoop = new CurveLoop();
-                    for (int i = 0; i < poligono.Count; i++)
+                    var p1 = poligono[i];
+                    var p2 = poligono[(i + 1) % poligono.Count];
+
+                    if (p1.TryGetValue("x", out double x1) && p1.TryGetValue("y", out double y1) &&
+                        p2.TryGetValue("x", out double x2) && p2.TryGetValue("y", out double y2))
                     {
-                        var p1 = poligono[i];
-                        var p2 = poligono[(i + 1) % poligono.Count];
-                        
-                        if (p1.TryGetValue("x", out double x1) && p1.TryGetValue("y", out double y1) &&
-                            p2.TryGetValue("x", out double x2) && p2.TryGetValue("y", out double y2))
-                        {
-                            curveLoop.Append(Line.CreateBound(new XYZ(x1 * m2ft, y1 * m2ft, 0), new XYZ(x2 * m2ft, y2 * m2ft, 0)));
-                        }
+                        curveLoop.Append(Line.CreateBound(new XYZ(x1 * m2ft, y1 * m2ft, 0), new XYZ(x2 * m2ft, y2 * m2ft, 0)));
                     }
+                }
+
+                // Polígono degenerado (puntos con claves x/y ausentes dejaron menos segmentos que
+                // vértices): saltar en vez de dejar que Floor.Create lance sobre un CurveLoop
+                // inválido y aborte el lote entero.
+                if (curveLoop.NumberOfCurves() < 3)
+                {
+                    errores.Add("Polígono con menos de 3 segmentos válidos, omitido.");
+                    continue;
+                }
+
+                try
+                {
                     var floor = Floor.Create(doc, new List<CurveLoop> { curveLoop }, floorTypeId, levelId);
                     creados++;
+                    idsCreados.Add(floor.Id.Value);
+                }
+                catch (Exception ex)
+                {
+                    // Un polígono inválido (autointersección, no coplanar) no debe abortar el resto
+                    // del lote -- se agrega el error, no se lista uno por uno (revit_api_knowledge.md,
+                    // patrón de módulos estrechos).
+                    errores.Add(ex.Message);
                 }
             }
             tx.Commit();
         }
 
-        return new { ElementosCreados = creados };
+        return new { ElementosCreados = creados, Ids = idsCreados, ErroresOmitidos = errores.Count, Errores = errores };
     }
 
     [ComandoRevit("ModificarParametro")]

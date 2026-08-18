@@ -454,18 +454,27 @@ tier a tier (esta sección resume, no duplica — si discrepan, manda `specs/roa
 - [x] **Tier 2 — catálogo y ciclo de aprendizaje**, cerrado tras la misma auditoría (gaps F2.1/F2.3:
       `/command` no logueaba, sin test E2E de catálogo).
 - [~] **Tier 3 — modelado asistido por agentes y VLM**, en progreso. Catálogo parcial ya construido
-      y verificado en Revit vivo (ver nota de validación abajo), con bugs conocidos pendientes:
-  - `CrearMurosMasivo`: los muros se generan en los niveles correctos pero aparecen solapados
-    volumétricamente — no se asigna `Top Constraint`/`Top Offset`, así que Revit usa una altura no
-    conectada por defecto que interfiere con niveles superiores.
-  - `CrearForjadosMasivo`: los forjados no se generan en el lienzo — probable fallo silencioso de
-    validación del `CurveLoop` (debe ser continuo, cerrado, sin autointersecciones) o ausencia de
-    un `FloorType` por defecto válido en la plantilla al resolverlo por `FilteredElementCollector`.
+      y verificado en Revit vivo (ver nota de validación abajo). Estado de sus piezas:
+  - **Base de creación masiva corregida (2026-08-18, nivel 1-2, pendiente de confirmación en Revit
+    vivo por el usuario)**: `CrearMurosMasivo` ahora fija `Top Constraint` (siguiente nivel por
+    elevación) o altura desconectada explícita si no hay nivel superior — antes no asignaba
+    ninguno de los dos y los muros aparecían solapados volumétricamente. `CrearForjadosMasivo`
+    resuelve un `FloorType` por defecto si no se especifica uno válido (antes pasaba
+    `InvalidElementId` y `Floor.Create` lanzaba una excepción que un caller que descarta la
+    respuesta del pipe veía como "no se genera nada"), y omite/agrega errores por polígono
+    inválido en vez de abortar el lote entero. Ambos piden ahora previsualización y aprobación
+    antes de crear — hallazgo independiente de dos sesiones de `architect` (ADR-012 CAD y
+    ADR-012/PDF, nombres a reconciliar): la creación masiva no tenía ningún punto de revisión
+    humana, a diferencia del borrado y la modificación de preexistentes.
   - F3.1 (Contexto Denso): diseño resuelto (borrador de ADR-011, pendiente de aprobación del
     usuario antes de aplicarlo a `specs/tech-spec.md`) — sin BD vectorial en v1, dato dinámico ya
     cubierto por `/command` existente (`ExportarContextoMasivo`, `ExportarGrafoTopologico`), dato
     estático (CTE/metodologías) como corpus curado a mano, mismo patrón que
     `revit_api_knowledge.md`.
+  - F3.2 (Modelado VLM/CAD, "casa completa desde PDF o CAD"): dos borradores de ADR en paralelo
+    (ambos numerados ADR-012 de forma independiente, pendiente de reconciliar), con planes
+    accionables. Ver `specs/roadmap.md` §Tier 3 para el detalle — incluyen huecos de catálogo
+    reales (no existe ningún comando de puertas/ventanas; `CrearMurosMasivo` no soporta arcos).
 - [ ] **Tier 4 — headless & batch processing**, no iniciado. Contradice una decisión ya tomada en
       `specs/roadmap.md` (*Out of Roadmap → Distribución al estudio*: cambiaría la salvaguarda
       principal de revisión humana por operación) — requiere resolver esa tensión antes de
