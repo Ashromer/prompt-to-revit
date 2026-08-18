@@ -263,6 +263,31 @@ Una vez completado el puente seguro (Tier 1) y el catálogo precompilado con sal
 >   elemento degenerado abortaba el lote entero. Detalle completo en `.claude/orchestration-log.md`.
 >   Build+tests verdes (111/111) tras el fix — sigue pendiente la verificación en Revit vivo de todo
 >   lo de arriba, el judge no sustituye el nivel 3.
+> - **2026-08-18, catálogo ampliado de 31 a 55 comandos** (5 lotes, a petición explícita del
+>   usuario: "cuantos más tengamos mejor irá mañana"). Cada firma nueva verificada con
+>   `MetadataLoadContext` antes de escribir código — ninguna se asumió de memoria. Nuevos:
+>   habitaciones/techos (`CrearHabitacionesMasivo`/`CrearTechosMasivo`), rejillas y columnas
+>   estructurales (`CrearRejillasEstructuralesMasivo`/`CrearColumnasMasivo`), copiar/mover/rotar
+>   elementos existentes (`CopiarElementosMasivo`/`MoverElementosMasivo`/`RotarElementosMasivo`,
+>   estos dos últimos con `PreexistingElementGuard`), etiquetado y notas de texto
+>   (`EtiquetarElementosEnVista`/`CrearTextoEnVista`), niveles en lote
+>   (`CrearNivelesMasivo`), renombrar/duplicar tipo/leer parámetros de un elemento
+>   (`RenombrarElemento`/`DuplicarTipoDeElemento`/`ObtenerParametrosDeElemento`), descubrimiento de
+>   niveles y vistas (`ObtenerNiveles`/`ObtenerVistas`) y plantilla de vista
+>   (`AplicarPlantillaDeVista`), muro curvo y barandillas (`CrearMuroCurvo`/`CrearBarandillasMasivo`),
+>   agrupar/desagrupar/colocar grupo (`CrearGrupoDeElementos`/`DesagruparElementos`/
+>   `ColocarGrupoEnPunto`), vistas 3D y de alzado (`CrearVista3D`/`CrearVistaAlzado`).
+>   **Dos comandos marcados con riesgo geométrico más alto que el resto** (documentado en su propio
+>   comentario de código, primeros candidatos a revisar en la prueba de mañana si algo sale mal
+>   orientado): `CrearVistaSeccion` (orientación del `BoundingBoxXYZ` por `Transform`) y
+>   `CrearVistaAlzado` (significado exacto de `indiceLado`, 0–3, no verificado en Revit vivo). Sin
+>   tests nuevos para ninguno de los 24: requieren `Document`/`Level` reales, mismo límite de nivel 2
+>   ya documentado para el resto de `ModelingCommands`. Debug y Release limpios en cada lote,
+>   `dotnet test` 111/111 sin regresiones, sin duplicados de nombre (verificado por script tras cada
+>   lote). Deliberadamente fuera de este lote por riesgo/complejidad sin verificar en vivo:
+>   escaleras, cotas/dimensiones, elementos MEP — quedan para cuando haya evidencia real de que
+>   hacen falta (mismo principio de §6: el catálogo se puebla con lo que se usa, no con lo que se
+>   imagina de antemano).
 
 ### Backlog de catálogo — "casa completa" (2026-08-18)
 

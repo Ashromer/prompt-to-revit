@@ -614,3 +614,66 @@ con este fichero en cuanto esa PR se mergee. Aquí solo el resumen y el paso fin
   lectura de cualquier script ejecutable en busca de red/`exec`/`subprocess`, y verificación de
   integridad por hash contra el origen — no solo copiar y confiar en que "es de GitHub, será seguro"
 - Checkpoint: `dev` con 9 commits de esta sesión, todos pusheados. Nada en vuelo.
+
+## [2026-08-18] Ampliación del catálogo 31 → 55 comandos (5 lotes, sin `architect`/`judge`)
+
+- Agentes usados: ninguno, directo en la conversación principal
+- Petición del usuario: "puedes además meter más acciones hasta que nos quedemos sin tokens hoy?
+  cuantos más tengamos mejor irá mañana" — autorización explícita a seguir ampliando el catálogo
+  sin pausa, priorizando cantidad+cobertura de cara a la prueba en vivo de mañana
+- Qué se hizo: 5 lotes de comandos nuevos, cada uno con su propio ciclo
+  verificar-firma→implementar→build Debug+Release→`dotnet test`→commit→push (sin esperar a acumular
+  varios lotes antes de verificar, para que un fallo de compilación no se mezclara entre lotes):
+  1. Habitaciones/techos, rejillas estructurales, copiar/mover/rotar, etiquetado, sección de vista (8)
+  2. Niveles en lote, columnas, vista 3D, texto, renombrar/duplicar tipo/leer parámetros (7)
+  3. Descubrimiento: niveles, vistas, plantilla de vista (3)
+  4. Muro curvo, barandillas, agrupar/colocar grupo (4)
+  5. Vista de alzado, desagrupar (2)
+- Disciplina aplicada en los 5 lotes, sin excepción: **ninguna firma de API nueva se asumió de
+  memoria** — cada una (`Document.Create.NewRoom`, `Ceiling.Create`, `Grid.Create`,
+  `ElementTransformUtils.CopyElement/MoveElement`, `IndependentTag.Create`,
+  `ViewSection.CreateSection`, `ElementType.Duplicate`, `View3D.CreateIsometric`,
+  `TextNote.Create`, `Wall.Create` con `Curve`, `Arc.Create`, `Railing.Create`,
+  `Document.Create.NewGroup/PlaceGroup`, `ElevationMarker.CreateElevationMarker/CreateElevation`,
+  `Group.UngroupMembers`) se verificó con `MetadataLoadContext` contra
+  `Nice3point.Revit.Api.RevitAPI` 2026.4.10 antes de escribir una sola línea contra ella — mismo
+  proceso que ya se documentó en `revit_api_knowledge.md` para los comandos de tejado/tabla de esta
+  mañana, aplicado ahora de forma sistemática lote a lote en vez de puntual
+- Régimen de aprobación asignado por naturaleza de la operación, no copiado sin pensar: creación
+  masiva → `UmbralAprobacionCreacion` (habitaciones, techos, rejillas, columnas, niveles,
+  barandillas, etiquetas); modificación de algo que ya existía in situ → `PreexistingElementGuard`
+  (mover, rotar, renombrar, agrupar, desagrupar); creación única no destructiva → sin aprobación,
+  igual que `CrearMuroRecto`/`CrearNivel` ya establecían (muro curvo, tipo duplicado, vista 3D/
+  sección/alzado, texto, colocar grupo). Copiar se trató como creación (el original queda intacto),
+  no como modificación de preexistente — matiz explícito, no automático
+- Qué falló o costó más de lo esperado: un error de compilación real en el lote 3 —
+  `BaseCommands.cs` no tenía el alias `using View = Autodesk.Revit.DB.View;` que
+  `ViewCommands.cs`/`AnnotationCommands.cs` ya llevaban, porque nunca antes había necesitado el tipo
+  `View` explícitamente (`ObtenerInfoVistaActual` usa `doc.ActiveView` sin declarar el tipo). CS0104
+  ambiguo con `System.Windows.Forms.View` (`UseWindowsForms=true`) en cuanto `ObtenerVistas`
+  necesitó `.Cast<View>()`. Exactamente el patrón de colisión que `revit_api_knowledge.md` ya
+  documentaba — reapareció por primera vez en un fichero nuevo, no por descuido en uno ya conocido
+- Riesgo diferenciado, no ocultado: `CrearVistaSeccion` (orientación del `BoundingBoxXYZ` por
+  `Transform`, patrón estándar del SDK pero sin verificar en vivo) y `CrearVistaAlzado` (significado
+  exacto de `indiceLado` 0–3) llevan su propio comentario in-code marcándolos como primeros
+  candidatos a revisar si algo sale mal orientado mañana — no se escondió la incertidumbre solo
+  porque "compila". El resto de los 24 comandos son geometría/API ya usada en este mismo proyecto
+  (mismas sobrecargas que `ColocarMobiliarioMasivo`/`CrearForjadosMasivo`) o de riesgo bajo (lectura
+  pura, cambio de una sola propiedad)
+- Deliberadamente NO añadido, con motivo explícito: escaleras, cotas/dimensiones, elementos MEP —
+  API más compleja y más sensible a versión que todo lo de arriba, sin evidencia de que hagan falta
+  todavía (principio de §6 del propio `DOCUMENTACION.md`: el catálogo se puebla con lo que se usa)
+- Verificación: Debug y Release limpios en los 5 lotes (verificado tras cada uno, no al final),
+  `dotnet test` 111/111 sin regresiones en ningún punto. Sin duplicados de nombre en el catálogo
+  (verificado por script de PowerShell contra las 55 etiquetas `ComandoRevit` tras el último lote).
+  Sin tests nuevos posibles para ninguno de los 24 comandos: todos requieren `Document`/`Level`/etc.
+  reales de Revit, mismo límite de nivel 2 que el resto de `ModelingCommands` — nivel 1 hasta la
+  prueba en vivo de mañana, que es exactamente donde más impacto tiene tener 55 comandos en vez de 31
+- Aprendizaje: verificar la firma ANTES de escribir, lote a lote, cuesta lo mismo tanto si se hace
+  una vez para 24 comandos como si se hace repartido en 5 sesiones de probe — pero repartido detecta
+  antes un error de compilación real (el de `View`) sin que se mezcle con otros 20 comandos sin
+  probar todavía. Confirma que el patrón de este proyecto (verificar→implementar→build→test→commit
+  por lote pequeño, no por sprint completo) sigue siendo el correcto incluso fuera del ciclo
+  `specify→plan→implement` formal
+- Checkpoint: `dev` con 15 commits de esta sesión, todos pusheados. Nada en vuelo. Documentación
+  (`specs/roadmap.md`) actualizada en el mismo checkpoint.
