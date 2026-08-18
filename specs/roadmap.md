@@ -254,6 +254,15 @@ Una vez completado el puente seguro (Tier 1) y el catálogo precompilado con sal
 >   ADR-013): el procedimiento de anclaje de escala + muro de prueba antes del lote se documentó en
 >   `.claude/skills/revit-bridge/SKILL.md`. Pendiente de los dos: verificación en Revit vivo contra
 >   ficheros/planos reales, y el spike no bloqueante contra un DWG de terceros (D1 del ADR-012).
+> - **2026-08-18, `judge` pasó por fin sobre el sprint de hoy** (retroactivo, contra el rango de
+>   commits del día): CHANGES_REQUESTED, 4 hallazgos bloqueantes, los 4 corregidos el mismo día —
+>   `/commands`/arranque solo veían `RevitBridge.Utils` y no descubrían ninguno de los comandos de
+>   `RevitBridge.Addin` (invertía la precedencia commandset→Roslyn); `cad_extract_geometry` serializaba
+>   PascalCase contra un receptor que espera minúscula (`CrearMurosMasivo` creaba 0 muros sin error);
+>   `CrearMurosMasivo`/`CrearForjadosMasivo` sin try/catch por elemento en parte del cuerpo, un
+>   elemento degenerado abortaba el lote entero. Detalle completo en `.claude/orchestration-log.md`.
+>   Build+tests verdes (111/111) tras el fix — sigue pendiente la verificación en Revit vivo de todo
+>   lo de arriba, el judge no sustituye el nivel 3.
 
 ### Backlog de catálogo — "casa completa" (2026-08-18)
 
