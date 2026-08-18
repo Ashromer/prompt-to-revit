@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.Structure;
@@ -70,11 +71,14 @@ public static class ModelingCommands
         // Salvaguarda nueva (hallazgo independiente de las dos sesiones de architect de ADR-012,
         // CAD y PDF/VLM, 2026-08-18): creación masiva sin ningún punto de revisión humana rompe en
         // espíritu §5.D.14. Previsualización + aprobación, mismo patrón que BorrarElementosMasivo.
-        var resumenCreacion = DeletionPreview.ConstruirResumen(
-            $"crear en el nivel '{nivelActual.Name}'", Enumerable.Repeat("Muro", listaMuros.Count));
-        var approvalCreacion = new RevitBridge.Addin.UI.ApprovalService();
-        if (!approvalCreacion.SolicitarAprobacion(resumenCreacion))
-            throw new InvalidOperationException("Creación masiva de muros cancelada por el usuario.");
+        if (UmbralAprobacionCreacion.RequiereAprobacion(listaMuros.Count))
+        {
+            var resumenCreacion = DeletionPreview.ConstruirResumen(
+                $"crear en el nivel '{nivelActual.Name}'", Enumerable.Repeat("Muro", listaMuros.Count));
+            var approvalCreacion = new RevitBridge.Addin.UI.ApprovalService();
+            if (!approvalCreacion.SolicitarAprobacion(resumenCreacion))
+                throw new InvalidOperationException("Creación masiva de muros cancelada por el usuario.");
+        }
 
         int creados = 0;
         var idsCreados = new List<long>();
@@ -145,11 +149,14 @@ public static class ModelingCommands
         if (listaPoligonos == null || listaPoligonos.Count == 0) return new { Creados = 0 };
 
         // Misma salvaguarda que CrearMurosMasivo (ver comentario arriba).
-        var resumenCreacion = DeletionPreview.ConstruirResumen(
-            $"crear en el nivel '{nivelActual.Name}'", Enumerable.Repeat("Forjado", listaPoligonos.Count));
-        var approvalCreacion = new RevitBridge.Addin.UI.ApprovalService();
-        if (!approvalCreacion.SolicitarAprobacion(resumenCreacion))
-            throw new InvalidOperationException("Creación masiva de forjados cancelada por el usuario.");
+        if (UmbralAprobacionCreacion.RequiereAprobacion(listaPoligonos.Count))
+        {
+            var resumenCreacion = DeletionPreview.ConstruirResumen(
+                $"crear en el nivel '{nivelActual.Name}'", Enumerable.Repeat("Forjado", listaPoligonos.Count));
+            var approvalCreacion = new RevitBridge.Addin.UI.ApprovalService();
+            if (!approvalCreacion.SolicitarAprobacion(resumenCreacion))
+                throw new InvalidOperationException("Creación masiva de forjados cancelada por el usuario.");
+        }
 
         int creados = 0;
         var idsCreados = new List<long>();
@@ -225,11 +232,14 @@ public static class ModelingCommands
 
         if (listaAberturas == null || listaAberturas.Count == 0) return new { Creados = 0 };
 
-        var resumenCreacion = DeletionPreview.ConstruirResumen(
-            $"crear en el muro (ID {muroId})", Enumerable.Repeat("Abertura", listaAberturas.Count));
-        var approvalCreacion = new RevitBridge.Addin.UI.ApprovalService();
-        if (!approvalCreacion.SolicitarAprobacion(resumenCreacion))
-            throw new InvalidOperationException("Creación masiva de aberturas cancelada por el usuario.");
+        if (UmbralAprobacionCreacion.RequiereAprobacion(listaAberturas.Count))
+        {
+            var resumenCreacion = DeletionPreview.ConstruirResumen(
+                $"crear en el muro (ID {muroId})", Enumerable.Repeat("Abertura", listaAberturas.Count));
+            var approvalCreacion = new RevitBridge.Addin.UI.ApprovalService();
+            if (!approvalCreacion.SolicitarAprobacion(resumenCreacion))
+                throw new InvalidOperationException("Creación masiva de aberturas cancelada por el usuario.");
+        }
 
         int creados = 0;
         var idsCreados = new List<long>();
@@ -292,11 +302,14 @@ public static class ModelingCommands
 
         if (listaMobiliario == null || listaMobiliario.Count == 0) return new { Creados = 0 };
 
-        var resumenCreacion = DeletionPreview.ConstruirResumen(
-            $"crear en el nivel '{nivel.Name}'", Enumerable.Repeat("Mobiliario", listaMobiliario.Count));
-        var approvalCreacion = new RevitBridge.Addin.UI.ApprovalService();
-        if (!approvalCreacion.SolicitarAprobacion(resumenCreacion))
-            throw new InvalidOperationException("Colocación masiva de mobiliario cancelada por el usuario.");
+        if (UmbralAprobacionCreacion.RequiereAprobacion(listaMobiliario.Count))
+        {
+            var resumenCreacion = DeletionPreview.ConstruirResumen(
+                $"crear en el nivel '{nivel.Name}'", Enumerable.Repeat("Mobiliario", listaMobiliario.Count));
+            var approvalCreacion = new RevitBridge.Addin.UI.ApprovalService();
+            if (!approvalCreacion.SolicitarAprobacion(resumenCreacion))
+                throw new InvalidOperationException("Colocación masiva de mobiliario cancelada por el usuario.");
+        }
 
         int creados = 0;
         var idsCreados = new List<long>();
@@ -440,6 +453,40 @@ public static class ModelingCommands
         return new { ElementosSolicitados = ids.Count, ElementosBorrados = borradosConfirmados.Count };
     }
 
+    [ComandoRevit("CargarFamilia")]
+    public static object CargarFamilia(Document doc, string rutaArchivo)
+    {
+        // Backlog "casa completa": pregunta abierta resuelta -- la ruta la decide siempre quien
+        // llama (Claude/usuario) en cada invocación, nunca una convención de carpeta fija embebida
+        // aquí. Fijar una ruta por defecto contradiría R6 ("sin rutas fijas, sin supuestos sobre
+        // esta máquina concreta"); pedirla explícitamente en cada llamada es más fricción pero es
+        // la única opción que no asume nada del entorno de quien use el bridge.
+        if (!File.Exists(rutaArchivo))
+            throw new ArgumentException($"No existe el fichero '{rutaArchivo}'.");
+        if (!rutaArchivo.EndsWith(".rfa", StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException("Solo se admiten ficheros .rfa.");
+
+        Family? familia;
+        using (var tx = new Transaction(doc, "Cargar Familia MCP"))
+        {
+            tx.Start();
+            var cargada = doc.LoadFamily(rutaArchivo, out familia);
+            tx.Commit();
+
+            if (!cargada || familia == null)
+                throw new InvalidOperationException(
+                    $"No se pudo cargar la familia desde '{rutaArchivo}' (¿ya estaba cargada con otra versión, o el fichero no es una familia válida?).");
+        }
+
+        var tipos = familia.GetFamilySymbolIds()
+            .Select(id => doc.GetElement(id) as FamilySymbol)
+            .Where(simbolo => simbolo != null)
+            .Select(simbolo => new { Id = simbolo!.Id.Value, Nombre = simbolo.Name })
+            .ToList();
+
+        return new { FamiliaId = familia.Id.Value, Nombre = familia.Name, Tipos = tipos };
+    }
+
     [ComandoRevit("CrearTejadoExtrusion")]
     public static object CrearTejadoExtrusion(Document doc, int nivelId, string jsonPerfil, double profundidadMetros, int tipoTejadoId = 0)
     {
@@ -464,10 +511,13 @@ public static class ModelingCommands
         if (perfilPuntos == null || perfilPuntos.Count < 2)
             throw new ArgumentException("El perfil necesita al menos 2 puntos.");
 
-        var resumenCreacion = DeletionPreview.ConstruirResumen($"crear en el nivel '{nivel.Name}'", new[] { "Tejado (extrusión)" });
-        var approvalCreacion = new RevitBridge.Addin.UI.ApprovalService();
-        if (!approvalCreacion.SolicitarAprobacion(resumenCreacion))
-            throw new InvalidOperationException("Creación de tejado cancelada por el usuario.");
+        if (UmbralAprobacionCreacion.RequiereAprobacion(1))
+        {
+            var resumenCreacion = DeletionPreview.ConstruirResumen($"crear en el nivel '{nivel.Name}'", new[] { "Tejado (extrusión)" });
+            var approvalCreacion = new RevitBridge.Addin.UI.ApprovalService();
+            if (!approvalCreacion.SolicitarAprobacion(resumenCreacion))
+                throw new InvalidOperationException("Creación de tejado cancelada por el usuario.");
+        }
 
         ExtrusionRoof? tejado = null;
         using (var tx = new Transaction(doc, "Crear Tejado (Extrusión) MCP"))
@@ -520,10 +570,13 @@ public static class ModelingCommands
         if (puntos == null || puntos.Count < 3)
             throw new ArgumentException("La huella necesita al menos 3 puntos.");
 
-        var resumenCreacion = DeletionPreview.ConstruirResumen($"crear en el nivel '{nivel.Name}'", new[] { "Tejado (huella)" });
-        var approvalCreacion = new RevitBridge.Addin.UI.ApprovalService();
-        if (!approvalCreacion.SolicitarAprobacion(resumenCreacion))
-            throw new InvalidOperationException("Creación de tejado cancelada por el usuario.");
+        if (UmbralAprobacionCreacion.RequiereAprobacion(1))
+        {
+            var resumenCreacion = DeletionPreview.ConstruirResumen($"crear en el nivel '{nivel.Name}'", new[] { "Tejado (huella)" });
+            var approvalCreacion = new RevitBridge.Addin.UI.ApprovalService();
+            if (!approvalCreacion.SolicitarAprobacion(resumenCreacion))
+                throw new InvalidOperationException("Creación de tejado cancelada por el usuario.");
+        }
 
         FootPrintRoof? tejado = null;
         using (var tx = new Transaction(doc, "Crear Tejado (Huella) MCP"))

@@ -281,9 +281,22 @@ toque (verificar contra el paquete NuGet exacto antes de codificar, no asumir la
 > `NewExtrusionRoof`/`NewFootPrintRoof`/`NewReferencePlane` y los indexadores `DefinesSlope`/
 > `SlopeAngle[ModelCurve]` se verificaron por reflexión directa contra el DLL de metadatos del
 > paquete NuGet (`Nice3point.Revit.Api.RevitAPI` 2026.4.10) antes de escribir el código, con
-> `System.Reflection.MetadataLoadContext` — no se asumieron de memoria. Sigue pendiente: la
-> pregunta de carga de familias desde disco (sin resolver a propósito), y confirmación en Revit
-> vivo de los dos comandos de tejado en particular (geometría nunca antes probada en este proyecto).
+> `System.Reflection.MetadataLoadContext` — no se asumieron de memoria.
+>
+> **2026-08-18, segunda pasada — las dos preguntas abiertas que quedaban, resueltas**:
+> `CargarFamilia(doc, rutaArchivo)` (`ModelingCommands.cs`) resuelve la carga de familias: ruta
+> siempre explícita del llamador, nunca una convención fija (R6). `RevitBridge.Core.
+> UmbralAprobacionCreacion` resuelve el mecanismo del umbral de aprobación (controlado solo por la
+> variable de entorno `REVITBRIDGE_UMBRAL_APROBACION_CREACION`, nunca por un parámetro del propio
+> comando — si el modelo pudiera subirlo por su cuenta, la salvaguarda no protegería nada) y ya
+> gobierna los 6 comandos de creación masiva/tejado, no solo los dos originales. El *valor* del
+> umbral (por defecto 1, pide siempre) sigue sin calibrar — eso solo se resuelve con uso real, no
+> es una decisión de diseño pendiente.
+>
+> Sigue pendiente, sin fecha: confirmación en Revit vivo de todo el backlog (especialmente los dos
+> comandos de tejado, geometría nunca antes probada en este proyecto), y el spike no bloqueante de
+> ADR-012 contra un DXF/DWG real de terceros — bloqueado en que el usuario aporte un fichero real,
+> no en trabajo pendiente de este lado.
 
 Cada uno por su ciclo normal (`revit-developer` + `judge`, sin `architect` salvo que al implementar aparezca una decisión de diseño no prevista aquí) — no agrupados en un solo lote: son API de Revit distintas entre sí (host-based vs. free-standing vs. roof sketching), el riesgo de implementación no es uniforme.
 
