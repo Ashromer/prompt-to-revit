@@ -1,4 +1,5 @@
 .worktrees/
+.claude/worktrees/
 bin/
 obj/
 node_modules/
@@ -6,3 +7,11 @@ dist/
 *.user
 .vs/
 .claude/settings.local.json
+
+# Config y artefactos locales de herramientas de IA (rutas absolutas de máquina, no portables)
+.agents/
+scratch/
+
+# Assets de verificación manual que no son parte del proyecto de tests (binarios, posible
+# contenido de cliente real) -- no se commitean, ver .claude/orchestration-log.md
+tests/VLM Test 1/

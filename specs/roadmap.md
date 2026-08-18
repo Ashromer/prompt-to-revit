@@ -140,7 +140,7 @@ Levanta el andamiaje completo y **todo lo que no escribe en el modelo**. Al cerr
 
 **Criterio de cierre de Tier 0** — Existe un test E2E automatizado que arranca el puente MCP real contra un `PipeServer` con ejecutor falso, invoca la herramienta de consulta y la de catálogo, y verifica la respuesta y el camino de error, todo sin Revit y en verde en CI.
 
-## 🚀 Tier 1 — Ejecución con salvaguardas
+## 🚀 Tier 1 — Ejecución con salvaguardas — ✅ CERRADO (2026-08-18, tras auditoría y fix)
 
 Añade la capacidad de **escribir en el modelo**, y no añade ni una operación de escritura antes de que su salvaguarda esté en pie. El orden de las features de este tier es deliberado: el filtro sintáctico y el dry-run existen antes que el ejecutor, y la ventana de aprobación existe antes de la primera `Transaction`. Al cerrar el tier funcionan las cinco capas de §5 de `DOCUMENTACION.md`.
 
@@ -158,7 +158,23 @@ Añade la capacidad de **escribir en el modelo**, y no añade ni una operación 
 
 **Criterio de cierre de Tier 1** — Existe un test E2E automatizado que cubre el camino completo con ejecutor falso: dry-run con diagnósticos, snippet rechazado por el filtro sintáctico, aprobación concedida que ejecuta, aprobación caducada que no ejecuta, fallo de runtime que devuelve traza con `fase` correcta, y rollback que borra lo registrado. Todo sin Revit y verde en CI.
 
-## 🚀 Tier 2 — Catálogo y ciclo de aprendizaje
+> [!info] Auditoría de cierre (2026-08-18)
+> El tier se implementó completo (build limpio, test E2E de 6 caminos en verde) fuera de esta
+> sesión, pero contra un ejecutor falso que nunca instanciaba `RevitContext`, `SessionLog` ni
+> `ApprovalService` reales — así que "verde" no probaba que F1.9/§5.C.13 (ADR-006) estuvieran de
+> verdad conectados. Una auditoría posterior encontró 5 huecos entre `DOCUMENTACION.md` §5 y la
+> implementación real: `SessionLog` nunca se llamaba desde `/exec`, `/rollback` no reconstruía
+> desde el JSONL (tomaba ids de la petición, sin previsualización), el valor de retorno del script
+> se descartaba (`ids_creados` siempre vacío), `SyntaxGuard` solo bloqueaba `doc.Delete` por texto
+> literal del receptor (esquivable renombrando la variable) y no cubría los namespaces de §5.A.3,
+> y un comando modificaba preexistentes sin aprobación. Los 5 corregidos y verificados con 13 tests
+> nuevos — ver `.claude/orchestration-log.md`, entrada "Auditoría de Tier 1/2/3". **Aprendizaje
+> para futuros tiers**: un test E2E con ejecutor falso prueba el protocolo, no las salvaguardas: la
+> capa de integración real (`RevitContext.cs`) sigue siendo, por diseño, la única sin red de
+> pruebas automatizada — cerrar un tier exige releerla a mano contra §5, no solo mirar el semáforo
+> de CI.
+
+## 🚀 Tier 2 — Catálogo y ciclo de aprendizaje — ✅ CERRADO (2026-08-18, tras auditoría y fix)
 
 Cierra el bucle de §6: lo que se usa y se demuestra estable deja de improvisarse. Este tier es el que hace que el sistema mejore con el uso en vez de quedarse igual, y el que baja progresivamente la proporción de ejecuciones que necesitan Roslyn.
 
@@ -172,7 +188,19 @@ Cierra el bucle de §6: lo que se usa y se demuestra estable deja de improvisars
 
 **Criterio de cierre de Tier 2** — Existe un test E2E automatizado que invoca un comando compilado del catálogo a través del puente, verifica que el nombre coincide entre ambos lados, y cubre la vía de borrado con previsualización y la protección de preexistentes. Además, la cosecha del log produce un informe sobre un JSONL de prueba con candidatos y descartes justificados.
 
-## Tier 3: Modelado Asistido por Agentes y VLM (Visión-Lenguaje)
+> [!info] Auditoría de cierre (2026-08-18)
+> `/command` (F2.1) no escribía en `SessionLog` — solo `/exec` lo hacía — así que el reparto
+> Roslyn-vs-comando-compilado de §6 era imposible de calcular aunque el catálogo se usara de
+> verdad. `ParamCommands.ModificarParametroTextoCategoria` modificaba una categoría entera de
+> elementos preexistentes sin pedir aprobación (F2.5), porque la comprobación no estaba
+> centralizada y cada comando la reimplementaba a mano — o se olvidaba. Fix: logging de `/command`
+> con `via: "command"`, y `RevitBridge.Core.PreexistingElementGuard`/`DeletionPreview` compartidos
+> por los tres comandos que tocan preexistentes. Test E2E de catálogo añadido
+> (`Tier2EndToEndTests.cs`) y la cosecha del log verificada de verdad contra un JSONL sintético de
+> 9 ejecuciones (informe correcto: candidato a graduar, rotura de API agrupada, ruido descartado).
+> Detalle en `.claude/orchestration-log.md`.
+
+## Tier 3: Modelado Asistido por Agentes y VLM (Visión-Lenguaje) — 🟡 EN PROGRESO
 
 Una vez completado el puente seguro (Tier 1) y el catálogo precompilado con salvaguardas (Tier 2), el Addin asume su rol definitivo: el "sistema nervioso periférico". El Tier 3 consiste en conectar el "cerebro" (Agentes externos) que orquesta procesos arquitectónicos utilizando este puente, apostando por procesos de inicio densos (cálculo/lectura lenta) para una latencia nula en la ejecución posterior.
 
@@ -186,6 +214,33 @@ Una vez completado el puente seguro (Tier 1) y el catálogo precompilado con sal
 | F3.6 | **RAG Knowledge Base & Cristalización Python:** Absorción del Vector Store documental (Revit 2025 API) y destilación de cientos de scripts Python ("one-shot") en Comandos Maestros C# (Tier 2/3), eliminando dependencias de IronPython y errores de tipado. | F3.1 | Cierra la brecha entre el conocimiento abierto (scripts) y la seguridad de ejecución E2E. |
 
 **Criterio de cierre de Tier 3** — Un flujo E2E donde el usuario sube un croquis JPG a su interfaz de chat, el VLM lo analiza normativamente contra la Knowledge Base pre-cargada, y lanza cientos de llamadas silenciosas al catálogo C#, generando el esqueleto del edificio completo en segundos.
+
+> [!info] Estado real (2026-08-18)
+> Construido sin pasar por `specify → plan` (no hay `specs/00N-*` para Tier 3) ni por `judge`: un
+> puñado de comandos de extracción/vista/filtro/parámetros añadidos directo al catálogo
+> (`ExtractionCommands`, `ViewCommands`, `FilterCommands`, `ParamCommands`, ampliaciones de
+> `ModelingCommands`). Es una ampliación del catálogo de Tier 2 con la etiqueta "Tier 3", no las
+> features F3.1-F3.6 tal como están descritas — casi todas viven fuera del addin (en cómo un
+> agente orquesta llamadas), no como comandos C#.
+>
+> - **Verificado en Revit vivo** (única verificación de nivel 3 del proyecto hasta ahora, ver §9 de
+>   `DOCUMENTACION.md`): un script Roslyn vía `/exec` renombrando hojas con lógica arbitraria, y un
+>   disparo masivo de `/command` (niveles + forjados + muros) contra un modelo real.
+> - **Bugs conocidos de esa misma verificación**: `CrearMurosMasivo` genera muros solapados (falta
+>   `Top Constraint`/`Top Offset`); `CrearForjadosMasivo` no genera geometría en el lienzo
+>   (`CurveLoop` inválido o `FloorType` no resuelto). Detalle en `DOCUMENTACION.md` §9.
+> - **F3.1 tiene diseño resuelto** (borrador de ADR-011 vía sesión de `architect`, pendiente de
+>   aprobación del usuario antes de aplicarlo a `specs/tech-spec.md`): sin BD vectorial en v1, dato
+>   dinámico ya cubierto por `/command` existente, dato estático (CTE/metodologías) como corpus
+>   curado a mano.
+> - **F3.4 (Grasshopper) es scope creep** — no aparece en ningún otro sitio de `DOCUMENTACION.md`/
+>   `tech-spec.md`. Confirmar con el usuario antes de construir nada ahí.
+> - **F3.5 no es código de addin** — es disciplina de skill (`/revit-bridge`), no una feature C#
+>   con su propia rama.
+> - Antes de seguir: cerrar el diseño de F3.1 (aplicar o ajustar ADR-011), y cada feature restante
+>   por su propia sesión de `architect` — no agrupar como se agrupó Tier 0, son decisiones de
+>   diseño genuinamente distintas entre sí (dónde vive un vector store no es la misma decisión que
+>   qué cliente multimodal usar para VLM).
 
 ## Tier 4: Headless & Batch Processing (Minería de Datos en la Sombra)
 

@@ -71,6 +71,49 @@ public static class ModelingCommands
         return new { ElementosCreados = creados };
     }
 
+    [ComandoRevit("CrearForjadosMasivo")]
+    public static object CrearForjadosMasivo(Document doc, int nivelId, string jsonCoordenadasPoligonos, int tipoSueloId = 0)
+    {
+        var levelId = new ElementId(nivelId);
+        var floorTypeId = tipoSueloId > 0 ? new ElementId(tipoSueloId) : ElementId.InvalidElementId;
+        double m2ft = 1.0 / 0.3048;
+        
+        var opciones = new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+        // Estructura esperada: array de poligonos, cada poligono es array de puntos {"x":0,"y":0}
+        var listaPoligonos = System.Text.Json.JsonSerializer.Deserialize<List<List<Dictionary<string, double>>>>(jsonCoordenadasPoligonos, opciones);
+        
+        if (listaPoligonos == null || listaPoligonos.Count == 0) return new { Creados = 0 };
+
+        int creados = 0;
+        using (var tx = new Transaction(doc, $"Batch Crear {listaPoligonos.Count} Forjados (VLM)"))
+        {
+            tx.Start();
+            foreach (var poligono in listaPoligonos)
+            {
+                if (poligono.Count >= 3)
+                {
+                    var curveLoop = new CurveLoop();
+                    for (int i = 0; i < poligono.Count; i++)
+                    {
+                        var p1 = poligono[i];
+                        var p2 = poligono[(i + 1) % poligono.Count];
+                        
+                        if (p1.TryGetValue("x", out double x1) && p1.TryGetValue("y", out double y1) &&
+                            p2.TryGetValue("x", out double x2) && p2.TryGetValue("y", out double y2))
+                        {
+                            curveLoop.Append(Line.CreateBound(new XYZ(x1 * m2ft, y1 * m2ft, 0), new XYZ(x2 * m2ft, y2 * m2ft, 0)));
+                        }
+                    }
+                    var floor = Floor.Create(doc, new List<CurveLoop> { curveLoop }, floorTypeId, levelId);
+                    creados++;
+                }
+            }
+            tx.Commit();
+        }
+
+        return new { ElementosCreados = creados };
+    }
+
     [ComandoRevit("ModificarParametro")]
     public static object ModificarParametro(Document doc, int elementoId, string parametroNombre, string valor)
     {
@@ -114,6 +157,23 @@ public static class ModelingCommands
         }
 
         return new { Id = elem.Id.Value, Parametro = parametroNombre, NuevoValor = param.AsValueString() ?? valor };
+    }
+
+    [ComandoRevit("CrearNivel")]
+    public static object CrearNivel(Document doc, string nombre, double elevacionMetros)
+    {
+        double elevacionFeet = elevacionMetros / 0.3048;
+        Level? nivelNuevo = null;
+
+        using (var tx = new Transaction(doc, $"Crear Nivel {nombre}"))
+        {
+            tx.Start();
+            nivelNuevo = Level.Create(doc, elevacionFeet);
+            nivelNuevo.Name = nombre;
+            tx.Commit();
+        }
+
+        return new { Id = nivelNuevo.Id.Value, Nombre = nivelNuevo.Name, ElevacionMetros = elevacionMetros };
     }
 
     [ComandoRevit("BorrarElementosMasivo")]
