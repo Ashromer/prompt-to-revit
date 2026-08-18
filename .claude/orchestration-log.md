@@ -378,3 +378,72 @@ con este fichero en cuanto esa PR se mergee. Aquí solo el resumen y el paso fin
   ADR-012 (CAD y PDF) en sus worktrees respectivos, sin aplicar a `tech-spec.md`, pendientes de que
   el usuario decida cuál construir primero (o si de verdad quiere los dos en paralelo también en
   implementación, no solo en diseño)
+
+## [2026-08-18] Ejecución completa del backlog Tier 3 — ADRs aplicados, catálogo, RevitBridge.CadIngest, skill
+
+- Agentes usados: ninguno (directo en la conversación principal; las dos sesiones de `architect`
+  fueron el turno anterior)
+- Contexto: usuario confirmó "quiero hacerlo todo", delegó la reconciliación del choque de
+  numeración ADR-012 a mi criterio, y pidió seguir implementando el backlog completo "en orden" y
+  "easy" (sin ceremonia extra, ir directo)
+- Reconciliación de ADRs: ADR-011 (F3.1) + ADR-012 (mitad CAD, más infraestructura nueva real:
+  proyecto + dependencia) + ADR-013 (mitad PDF/VLM, casi sin código). Los tres aplicados a
+  `specs/tech-spec.md` (secciones completas, no solo referencia) más el Discovery checklist
+  actualizado con las preguntas que cada uno cerró y las que deja abiertas (nombre exacto del campo
+  de unidades de ACadSharp, rutas de familias para `doc.LoadFamily`, umbral N de aprobación).
+  `specs/roadmap.md`: F3.2 dividida en F3.2a/F3.2b, F3.7/F3.8 añadidas
+- Fix de base (prerrequisito compartido, señalado por las dos sesiones de `architect`): `Top
+  Constraint` en `CrearMurosMasivo`, `FloorType` por defecto en `CrearForjadosMasivo`, aprobación +
+  previsualización en ambos. `DeletionPreview.ConstruirResumen` generalizado (ya no asume
+  "elemento(s) preexistentes") en vez de crear el `CreationPreview` separado que proponían los dos
+  borradores — mismo patrón, sin clase duplicada, documentado como nota de aplicación conjunta en
+  el propio `tech-spec.md`
+- Backlog de catálogo "casa completa" implementado en el orden del propio backlog:
+  `ObtenerTiposCargadosPorCategoria`, `BuscarTiposDeMuroPorFuncion` + `tipoMuroId` en
+  `CrearMurosMasivo` (tabiques), `CrearAberturasMasivo` (puertas/ventanas, host-based),
+  `ColocarMobiliarioMasivo` (free-standing + rotación), `CrearTejadoExtrusion` y
+  `CrearTejadoPorHuella`. **Antes de escribir los dos comandos de tejado** (la pieza que el propio
+  backlog marcaba como más arriesgada, "firma exacta a verificar contra el NuGet, no asumir"): se
+  montó un proyecto scratch con `System.Reflection.MetadataLoadContext` para reflexionar
+  directamente sobre el DLL de metadatos de `Nice3point.Revit.Api.RevitAPI` 2026.4.10 (que no se
+  puede cargar en tiempo de ejecución por ser solo-referencia — `Assembly.LoadFrom` normal falla) y
+  confirmar las firmas reales de `NewExtrusionRoof`/`NewFootPrintRoof`/`NewReferencePlane` y que
+  `DefinesSlope`/`SlopeAngle` son indexadores por `ModelCurve`, no propiedades únicas del tejado.
+  Todo compiló a la primera contra esas firmas verificadas
+- `RevitBridge.CadIngest` (proyecto nuevo, ADR-012): mismo patrón de verificación antes de escribir
+  — un probe con el NuGet real de `ACadSharp` (cargable normalmente, no metadata-only) escribiendo
+  y releyendo un DXF sintético confirmó `CadDocument`, `Header.InsUnits`, `Layers`, `Entities`,
+  `LwPolyline.Vertices`/`Bulge`, `Insert.Block`→`BlockRecord`, y que `DwgReader` existe (soporte DWG
+  real, no solo DXF). `CadDocumentReader`/`CadScaleCalibrator`/`CadGeometryExtractor` +
+  `CadIngestTools.cs` (MCP, no pasan por el pipe). Teselado de arcos por bisección recursiva de
+  bulge (`bulgeMitad = bulge/(1+sqrt(1+bulge²))`), no por el enfoque de centro/radio más propenso a
+  error que se descartó a media escritura — verificado con un caso analítico exacto (semicírculo
+  bulge=1, ápice esperado en un punto calculable a mano) además del round-trip contra el DXF
+  sintético. Único bug real encontrado en esta ronda: `DxfReader` no liberaba el fichero tras leer
+  (`Assembly.LoadFrom` normal no aplica aquí, era un `using` que faltaba) — lo cazó el primer
+  `dotnet test`, no una revisión manual
+- Skill `revit-bridge` actualizada: paso 0 (contexto denso, ADR-011), sección nueva de modelado
+  desde CAD y desde PDF/imagen (anclaje de escala + muro de prueba antes del lote, ADR-013), tabla
+  de aprobación con la creación masiva añadida. De paso, corregida una línea obsoleta que seguía
+  mencionando "confiar 30 min" como opción real pese a que `DOCUMENTACION.md` §5.D.15 la descarta
+  explícitamente desde antes de esta sesión — inconsistencia real que nadie había limpiado
+- Verificación: Debug y Release limpios en cada punto de commit, `dotnet test` progresó 91→103 sin
+  ninguna regresión. Nivel 1-2 únicamente en todo lo nuevo — nivel 3 (Revit vivo) pendiente en
+  bloque para todo el backlog de esta sesión, en particular los dos comandos de tejado (geometría
+  nunca antes construida en este proyecto) y `RevitBridge.CadIngest` contra un DWG real de terceros
+- Qué falló o costó más de lo esperado: nada grave. El mayor coste de tiempo fue montar los dos
+  probes de reflexión (`MetadataLoadContext` para el paquete solo-referencia de Revit,
+  `Assembly.LoadFrom` normal para ACadSharp) en vez de escribir código contra firmas supuestas de
+  memoria — deliberado, es exactamente lo que el propio backlog pedía para la pieza de tejados y lo
+  que el borrador de ADR-012 pedía para el spike de CAD
+- Aprendizaje: cuando una firma de API de un paquete de metadatos (`ref/` sin `lib/`, como
+  `Nice3point.Revit.Api.*`) hay que verificarla sin poder ejecutar Revit,
+  `System.Reflection.MetadataLoadContext` (con un resolver que incluya también las DLLs del propio
+  runtime de .NET, no solo el paquete) permite reflexionar sobre las firmas reales sin necesidad de
+  cargar el ensamblado de verdad — más barato y más fiable que iterar a base de errores de
+  compilación hasta acertar la firma
+- Checkpoint: `dev` con 6 commits nuevos de esta sesión, todos pusheados. Nada en vuelo. Pendiente
+  explícito, no resuelto a propósito: rutas de familias para `doc.LoadFamily`, umbral N de
+  aprobación para creación masiva, persistencia de perfil de mapeo CAD (`cad_save_mapping_profile`)
+  y, sobre todo, **toda verificación en Revit vivo** de lo construido en esta sesión — es el
+  siguiente paso real, no una formalidad
