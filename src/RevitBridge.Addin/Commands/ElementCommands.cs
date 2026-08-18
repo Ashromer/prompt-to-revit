@@ -140,6 +140,35 @@ public static class ElementCommands
         return new { Id = grupo!.Id.Value, Nombre = grupo.GroupType.Name };
     }
 
+    [ComandoRevit("DesagruparElementos")]
+    public static object DesagruparElementos(Document doc, int grupoId)
+    {
+        // Desagrupar modifica el estado de los elementos miembro (dejan de pertenecer al grupo) --
+        // mismo régimen de preexistentes que CrearGrupoDeElementos. Firma verificada con
+        // MetadataLoadContext: Group.UngroupMembers() es real en 2026.4.10.
+        var grupo = doc.GetElement(new ElementId(grupoId)) as Group;
+        if (grupo == null) throw new ArgumentException("El id no corresponde a una instancia de grupo (Group).");
+
+        if (PreexistingElementGuard.RequiereAprobacion(new[] { (long)grupo.Id.Value }, App.ElementosCreadosEnSesion))
+        {
+            var resumen = DeletionPreview.ConstruirResumen("desagrupar", new[] { "Grupo" });
+            var approval = new RevitBridge.Addin.UI.ApprovalService();
+            if (!approval.SolicitarAprobacion(resumen))
+                throw new InvalidOperationException("Desagrupación cancelada por el usuario.");
+        }
+
+        List<long> idsMiembros;
+        using (var tx = new Transaction(doc, "Desagrupar MCP"))
+        {
+            tx.Start();
+            var miembros = grupo.UngroupMembers();
+            idsMiembros = miembros.Select(id => id.Value).ToList();
+            tx.Commit();
+        }
+
+        return new { ElementosDesagrupados = idsMiembros.Count, Ids = idsMiembros };
+    }
+
     private static string? SegunTipoDeAlmacenamiento(Parameter p) => p.StorageType switch
     {
         StorageType.String => p.AsString(),

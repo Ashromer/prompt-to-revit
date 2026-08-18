@@ -249,4 +249,38 @@ public static class ViewCommands
 
         return new { Id = vista.Id.Value, PlantillaAplicada = plantilla.Name };
     }
+
+    [ComandoRevit("CrearVistaAlzado")]
+    public static object CrearVistaAlzado(Document doc, int vistaPlantaId, double xMetros, double yMetros, int indiceLado = 0, int escala = 100)
+    {
+        // F3.7. Firma verificada con MetadataLoadContext: ElevationMarker.CreateElevationMarker
+        // (static) y ElevationMarker.CreateElevation(Document, ElementId viewPlanId, int index) son
+        // reales en 2026.4.10 -- indiceLado (0-3) selecciona qué lado del marcador se activa; el
+        // significado exacto de cada índice (frente/derecha/atrás/izquierda) no se ha verificado en
+        // Revit vivo, es el segundo comando de este lote (junto a CrearVistaSeccion) a revisar
+        // primero si la orientación sale inesperada en la prueba de mañana.
+        var vistaPlanta = doc.GetElement(new ElementId(vistaPlantaId)) as ViewPlan;
+        if (vistaPlanta == null) throw new ArgumentException("La vista indicada no es una vista en planta (ViewPlan).");
+
+        var viewFamilyType = new FilteredElementCollector(doc)
+            .OfClass(typeof(ViewFamilyType))
+            .Cast<ViewFamilyType>()
+            .FirstOrDefault(vft => vft.ViewFamily == ViewFamily.Elevation);
+        if (viewFamilyType == null) throw new InvalidOperationException("No se encontró ViewFamilyType para Elevation.");
+
+        double m2ft = 1.0 / 0.3048;
+        var origen = new XYZ(xMetros * m2ft, yMetros * m2ft, 0);
+
+        ElevationMarker? marcador = null;
+        ViewSection? alzado = null;
+        using (var tx = new Transaction(doc, "Crear Vista Alzado MCP"))
+        {
+            tx.Start();
+            marcador = ElevationMarker.CreateElevationMarker(doc, viewFamilyType.Id, origen, escala);
+            alzado = marcador.CreateElevation(doc, vistaPlanta.Id, indiceLado);
+            tx.Commit();
+        }
+
+        return new { Id = alzado.Id.Value, Nombre = alzado.Name, MarcadorId = marcador.Id.Value };
+    }
 }
