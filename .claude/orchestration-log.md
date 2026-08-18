@@ -533,3 +533,55 @@ con este fichero en cuanto esa PR se mergee. Aquí solo el resumen y el paso fin
   `~/.claude/revit_knowledge/revit_api_knowledge.md`) actualizada y verificada fuera de vivo. Nada
   en vuelo. Pendiente real para la próxima sesión: registrar el MCP server (primero de todo),
   después toda la verificación en Revit vivo acumulada de las últimas sesiones
+
+## [2026-08-18] Guía visual (Artifact) + judge del sprint Tier 3 de hoy: 4 hallazgos bloqueantes corregidos
+
+- Agentes usados: `judge` (lanzado en segundo plano al cierre del lote anterior, revisó el rango de
+  commits del sprint Tier 3 de hoy contra DOCUMENTACION.md §5); el resto, directo en la conversación
+  principal (guía Artifact + fixes)
+- Petición del usuario: "quiero una ux con presentación de como funciona para que el usuario tenga
+  una guía de como funciona el flujo y las acciones posibles también" — se construyó y publicó un
+  Artifact HTML (paleta cianotipo/vellum, IBM Plex, ambos temas) con la arquitectura de dos procesos,
+  la escalera query→command→compile→exec→rollback, las dos vías, las 18 salvaguardas y el catálogo
+  completo (31 comandos + 8 herramientas MCP) con parámetros reales y badges de aprobación
+- Veredicto del judge: CHANGES_REQUESTED, 4 hallazgos bloqueantes, todos corregidos antes de cerrar:
+  1. `/commands` y el chequeo de arranque de duplicados solo escaneaban `RevitBridge.Utils`
+     (`typeof(ComandoRevitAttribute).Assembly`), invisibilizando los 28+ comandos que viven en
+     `RevitBridge.Addin` — el despacho de `/command` sí escaneaba ambos ensamblados, así que se
+     podían invocar pero no descubrir. Invertía la precedencia commandset→Roslyn de CLAUDE.md: sin
+     verlos en el catálogo, el modelo tendría que adivinar que existen o caer a Roslyn. Fix: los tres
+     sitios (App.cs, `/commands`, `/command`) ahora leen `CommandCatalog.EnsambladosDelCatalogo`, una
+     única lista compartida — no pueden volver a divergir
+  2. `cad_extract_geometry` serializaba `SegmentoRecto` en PascalCase (P1x/P1y/...) sin política de
+     nombres; `CrearMurosMasivo` deserializa a `Dictionary<string,double>` con claves en minúscula.
+     `PropertyNameCaseInsensitive` solo afecta al binding sobre propiedades de un POCO, NO a las
+     claves de un `Dictionary<string,TValue>` (se leen literales, comparación ordinal). El pipeline
+     CAD→muros documentado en el propio comentario de `CadIngestTools` creaba 0 muros sin ningún
+     error — exactamente el patrón "mapeo con nombres distintos falla en silencio" que ya está en
+     `revit_api_knowledge.md` por el bug de Fachada Interactiva (2026-06-25), aquí en la frontera
+     JSON en vez de en un DTO C#. Fix: `PropertyNamingPolicy = JsonNamingPolicy.CamelCase`
+  3. `CrearMurosMasivo` no tenía try/catch por elemento (a diferencia de sus 3 hermanos ya
+     corregidos hoy): un muro degenerado abortaba el `using(tx)` entero y el rollback implícito
+     deshacía también los muros ya creados en la misma llamada
+  4. `CrearForjadosMasivo` construía el `CurveLoop` (`Line.CreateBound`) FUERA del único `try` que
+     envolvía solo `Floor.Create` — mismo modo de fallo que (3) para un polígono con vértices
+     coincidentes
+- Verificación: Debug y Release limpios, `dotnet test` 111/111. +4 tests: `CommandCatalogTests`
+  (pertenencia del ensamblado Addin a `EnsambladosDelCatalogo`) y `CadIngestToolsTests` (casing de
+  claves + JSON consumible por el mismo deserializador que usa `CrearMurosMasivo`, reproduciendo el
+  bug exacto antes del fix)
+- Qué falló o costó más de lo esperado: un test inicial (`Descubrir_Con_EnsambladosDelCatalogo_
+  Encuentra_Comandos_Reales_Del_Addin`) intentaba invocar `Assembly.GetTypes()` sobre el ensamblado
+  Addin real desde el proceso de test — falla con `ReflectionTypeLoadException` (`RevitAPI`/
+  `RevitAPIUI` no están presentes en tiempo de ejecución fuera de Revit; los paquetes Nice3point son
+  metadata-only para compilar, no runtime). Se descartó ese test y se dejó solo la comprobación de
+  pertenencia a la lista (metadata pura, sin cargar tipos) — es un límite real de "verificado fuera
+  de Revit" (nivel 2 de CLAUDE.md), no un defecto a forzar con un catch-all sin justificación en
+  producción
+- Aprendizaje: el mismo patrón de bug ("dos sitios que deberían ver lo mismo pero uno quedó
+  desincronizado") apareció dos veces hoy en capas distintas — descubrimiento de comandos
+  (reflexión) y formato de JSON (serialización) — reforzando que "comparar ambos lados de un
+  contrato, no solo revisar cada lado por separado" es el chequeo de mayor valor para un `judge` en
+  este proyecto. Y: `Assembly.GetTypes()` sobre `RevitBridge.Addin` es intrínsecamente nivel-3 (solo
+  dentro de Revit) — cualquier test futuro que quiera ejercitarlo de verdad tendrá el mismo límite
+- Checkpoint: `dev` con 8 commits de esta sesión, todos pusheados. Nada en vuelo.
