@@ -41,6 +41,34 @@ public static class ModelingCommands
         return new { Id = wall.Id.Value, Tipo = wall.WallType.Name, Longitud = geomLine.Length };
     }
 
+    [ComandoRevit("CrearMuroCurvo")]
+    public static object CrearMuroCurvo(Document doc, int nivelId, double centroXMetros, double centroYMetros, double radioMetros, double anguloInicioGrados, double anguloFinGrados, int tipoMuroId = 0)
+    {
+        // F3.7: CrearMuroRecto/CrearMurosMasivo solo cubrían tramos rectos (Line). Wall.Create
+        // acepta cualquier Curve (firma verificada con MetadataLoadContext: Create(Document, Curve,
+        // ElementId levelId, bool structural) -- Curve, no Line), así que un Arc real es la misma
+        // llamada, no un comando nuevo por dentro.
+        var levelId = new ElementId(nivelId);
+        var wallTypeId = tipoMuroId > 0 ? new ElementId(tipoMuroId) : ElementId.InvalidElementId;
+
+        double m2ft = 1.0 / 0.3048;
+        var centro = new XYZ(centroXMetros * m2ft, centroYMetros * m2ft, 0);
+        var arco = Arc.Create(centro, radioMetros * m2ft,
+            anguloInicioGrados * Math.PI / 180.0, anguloFinGrados * Math.PI / 180.0,
+            XYZ.BasisX, XYZ.BasisY);
+
+        Wall? wall = null;
+        using (var tx = new Transaction(doc, "Crear Muro Curvo MCP"))
+        {
+            tx.Start();
+            wall = Wall.Create(doc, arco, levelId, false);
+            if (tipoMuroId > 0) wall.ChangeTypeId(wallTypeId);
+            tx.Commit();
+        }
+
+        return new { Id = wall.Id.Value, Tipo = wall.WallType.Name, Longitud = arco.Length };
+    }
+
     [ComandoRevit("CrearMurosMasivo")]
     public static object CrearMurosMasivo(Document doc, int nivelId, string jsonCoordenadas, double alturaMetros = 3.0, int tipoMuroId = 0)
     {
@@ -376,6 +404,97 @@ public static class ModelingCommands
         }
 
         return new { ElementosCreados = creados, Ids = idsCreados, ErroresOmitidos = errores.Count, Errores = errores };
+    }
+
+    [ComandoRevit("CrearBarandillasMasivo")]
+    public static object CrearBarandillasMasivo(Document doc, int nivelId, string jsonRecorridos, int tipoBarandillaId = 0)
+    {
+        // F3.7: barandillas independientes (balcones, huecos de escalera) -- no las asociadas a una
+        // escalera/rampa, que es un overload distinto de Railing.Create no cubierto aquí. Firma
+        // verificada con MetadataLoadContext: Railing.Create(Document, CurveLoop, ElementId
+        // railingTypeId, ElementId baseLevelId) es real en 2026.4.10; CurveLoop puede ser un
+        // recorrido ABIERTO, no hace falta cerrarlo (mismo hallazgo que la fibra neutra de
+        // CreateViaThicken en revit_api_knowledge.md).
+        var levelId = new ElementId(nivelId);
+        var nivel = doc.GetElement(levelId) as Level;
+        if (nivel == null) throw new ArgumentException("Nivel no encontrado.");
+
+        ElementId railingTypeId;
+        if (tipoBarandillaId > 0)
+        {
+            railingTypeId = new ElementId(tipoBarandillaId);
+        }
+        else
+        {
+            railingTypeId = new FilteredElementCollector(doc).OfClass(typeof(Autodesk.Revit.DB.Architecture.RailingType)).FirstElementId();
+            if (railingTypeId == ElementId.InvalidElementId)
+                throw new InvalidOperationException("No hay ningún RailingType disponible en el documento y no se especificó tipoBarandillaId.");
+        }
+
+        double m2ft = 1.0 / 0.3048;
+
+        // Estructura esperada: array de recorridos, cada uno una lista de puntos {"x":0,"y":0}
+        // ABIERTA (no se cierra el bucle, a diferencia de CrearForjadosMasivo/CrearTechosMasivo).
+        var opciones = new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+        var listaRecorridos = System.Text.Json.JsonSerializer.Deserialize<List<List<Dictionary<string, double>>>>(jsonRecorridos, opciones);
+
+        if (listaRecorridos == null || listaRecorridos.Count == 0) return new { Creadas = 0 };
+
+        if (UmbralAprobacionCreacion.RequiereAprobacion(listaRecorridos.Count))
+        {
+            var resumenCreacion = DeletionPreview.ConstruirResumen(
+                $"crear en el nivel '{nivel.Name}'", Enumerable.Repeat("Barandilla", listaRecorridos.Count));
+            var approvalCreacion = new RevitBridge.Addin.UI.ApprovalService();
+            if (!approvalCreacion.SolicitarAprobacion(resumenCreacion))
+                throw new InvalidOperationException("Creación masiva de barandillas cancelada por el usuario.");
+        }
+
+        int creadas = 0;
+        var idsCreadas = new List<long>();
+        var errores = new List<string>();
+        using (var tx = new Transaction(doc, $"Batch Crear {listaRecorridos.Count} Barandillas"))
+        {
+            tx.Start();
+            foreach (var recorrido in listaRecorridos)
+            {
+                if (recorrido.Count < 2) continue;
+
+                try
+                {
+                    // Igual que CrearForjadosMasivo/CrearTechosMasivo (hallazgo judge 2026-08-18):
+                    // construir el CurveLoop DENTRO del try, no antes.
+                    var curveLoop = new CurveLoop();
+                    for (int i = 0; i < recorrido.Count - 1; i++)
+                    {
+                        var p1 = recorrido[i];
+                        var p2 = recorrido[i + 1];
+
+                        if (p1.TryGetValue("x", out double x1) && p1.TryGetValue("y", out double y1) &&
+                            p2.TryGetValue("x", out double x2) && p2.TryGetValue("y", out double y2))
+                        {
+                            curveLoop.Append(Line.CreateBound(new XYZ(x1 * m2ft, y1 * m2ft, 0), new XYZ(x2 * m2ft, y2 * m2ft, 0)));
+                        }
+                    }
+
+                    if (curveLoop.NumberOfCurves() < 1)
+                    {
+                        errores.Add("Recorrido con menos de 2 puntos válidos, omitido.");
+                        continue;
+                    }
+
+                    var barandilla = Autodesk.Revit.DB.Architecture.Railing.Create(doc, curveLoop, railingTypeId, levelId);
+                    creadas++;
+                    idsCreadas.Add(barandilla.Id.Value);
+                }
+                catch (Exception ex)
+                {
+                    errores.Add(ex.Message);
+                }
+            }
+            tx.Commit();
+        }
+
+        return new { ElementosCreados = creadas, Ids = idsCreadas, ErroresOmitidos = errores.Count, Errores = errores };
     }
 
     [ComandoRevit("ModificarParametro")]

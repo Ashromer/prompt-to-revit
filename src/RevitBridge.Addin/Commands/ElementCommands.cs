@@ -85,6 +85,61 @@ public static class ElementCommands
         return new { Id = elementoId, Categoria = elem.Category?.Name, Parametros = parametros };
     }
 
+    [ComandoRevit("CrearGrupoDeElementos")]
+    public static object CrearGrupoDeElementos(Document doc, List<int> elementoIds, string nombreGrupo = "")
+    {
+        // Agrupar SÍ modifica los elementos originales (les asigna GroupId) -- misma salvaguarda de
+        // preexistentes que mover/rotar (§5.C.10/§5.D.15), no la de creación pura. Firma verificada
+        // con MetadataLoadContext: Document.Create.NewGroup(ICollection<ElementId>) es real en
+        // 2026.4.10.
+        if (elementoIds == null || elementoIds.Count < 2)
+            throw new ArgumentException("Hacen falta al menos 2 elementos para formar un grupo.");
+
+        var ids = elementoIds.Select(id => new ElementId(id)).ToList();
+
+        if (PreexistingElementGuard.RequiereAprobacion(ids.Select(id => (long)id.Value), App.ElementosCreadosEnSesion))
+        {
+            var categorias = ids.Select(id => doc.GetElement(id)?.Category?.Name ?? "Desconocido");
+            var resumen = DeletionPreview.ConstruirResumen("agrupar", categorias);
+            var approval = new RevitBridge.Addin.UI.ApprovalService();
+            if (!approval.SolicitarAprobacion(resumen))
+                throw new InvalidOperationException("Agrupación de elementos cancelada por el usuario.");
+        }
+
+        Group? grupo = null;
+        using (var tx = new Transaction(doc, $"Agrupar {ids.Count} Elementos MCP"))
+        {
+            tx.Start();
+            grupo = doc.Create.NewGroup(ids);
+            if (!string.IsNullOrWhiteSpace(nombreGrupo)) grupo.GroupType.Name = nombreGrupo;
+            tx.Commit();
+        }
+
+        return new { Id = grupo.Id.Value, TipoGrupoId = grupo.GroupType.Id.Value, Nombre = grupo.GroupType.Name };
+    }
+
+    [ComandoRevit("ColocarGrupoEnPunto")]
+    public static object ColocarGrupoEnPunto(Document doc, int tipoGrupoId, double xMetros, double yMetros, double zMetros = 0)
+    {
+        // Creación pura de una nueva instancia de un GroupType ya existente -- sin aprobación,
+        // mismo régimen que CrearMuroRecto/DuplicarTipoDeElemento (creación única, no masiva).
+        var tipoGrupo = doc.GetElement(new ElementId(tipoGrupoId)) as GroupType;
+        if (tipoGrupo == null) throw new ArgumentException("El id no corresponde a un GroupType (¿lo obtuviste de CrearGrupoDeElementos?).");
+
+        double m2ft = 1.0 / 0.3048;
+        var punto = new XYZ(xMetros * m2ft, yMetros * m2ft, zMetros * m2ft);
+
+        Group? grupo = null;
+        using (var tx = new Transaction(doc, "Colocar Grupo MCP"))
+        {
+            tx.Start();
+            grupo = doc.Create.PlaceGroup(punto, tipoGrupo);
+            tx.Commit();
+        }
+
+        return new { Id = grupo!.Id.Value, Nombre = grupo.GroupType.Name };
+    }
+
     private static string? SegunTipoDeAlmacenamiento(Parameter p) => p.StorageType switch
     {
         StorageType.String => p.AsString(),
