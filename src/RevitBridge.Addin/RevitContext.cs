@@ -267,7 +267,7 @@ public sealed class RevitContext : IRevitQueryContext
                             // Asumiendo que idValue cabe en int (aunque idValue es long)
                             var elementId = new ElementId((int)idValue);
 #endif
-                            _doc.Delete(elementId);
+                            _doc!.Delete(elementId);
                         }
                     }
                     tx.Commit();

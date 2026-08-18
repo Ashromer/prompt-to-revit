@@ -14,7 +14,7 @@ namespace RevitBridge.Addin;
 /// </summary>
 public sealed class App : IExternalApplication
 {
-    public static System.Windows.Threading.Dispatcher RevitDispatcher { get; private set; }
+    public static System.Windows.Threading.Dispatcher RevitDispatcher { get; private set; } = null!;
 
     private ExecutionQueue? _cola;
     private ExternalEvent? _externalEvent;

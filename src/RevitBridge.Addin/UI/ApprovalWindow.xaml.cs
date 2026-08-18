@@ -10,7 +10,7 @@ namespace RevitBridge.Addin.UI
         private int _timeLeft = 60;
         public bool IsApproved { get; private set; } = false;
         
-        public event EventHandler WindowClosedResult;
+        public event EventHandler? WindowClosedResult;
 
         public ApprovalWindow(string snippet)
         {
@@ -25,7 +25,7 @@ namespace RevitBridge.Addin.UI
             UpdateTimerText();
         }
 
-        private void Timer_Tick(object sender, EventArgs e)
+        private void Timer_Tick(object? sender, EventArgs e)
         {
             _timeLeft--;
             UpdateTimerText();
