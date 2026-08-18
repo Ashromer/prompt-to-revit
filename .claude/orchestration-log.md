@@ -72,3 +72,29 @@ Formato por entrada — una por lote/feature cerrado, añadida por quien orquest
 - Checkpoint: lote cerrado, nada en vuelo — punto seguro para `/clear` si se quiere
 - Skipped: `tester` como agente separado (build+test ya verificados directamente por el orquestador
   antes de pasar a `judge`; evitó un arranque en frío más para un lote de solo scaffolding)
+
+## [2026-08-18] Effort por agente en frontmatter — optimización de tokens del orquestador
+
+- Agentes usados: ninguno (trabajo de proceso, directo en la conversación principal)
+- Alcance: añadido `effort:` al frontmatter de los 8 agentes de `.claude/agents/`. `high` para
+  `judge`, `architect`, `revit-developer`, `mcp-developer` (decisiones de diseño y las 18
+  salvaguardas de §5 en juego); `medium` para `code-developer`, `test-developer`, `ui-developer`
+  (ejecución mecánica de un plan ya cerrado); `low` para `tester` (correr y reportar, sin diseño)
+- Verificación previa: el campo `effort` en frontmatter de subagente es real y documentado
+  (`code.claude.com/docs/en/model-config.md` §"Adjust effort level" y §"Set the effort level" —
+  "Skill and subagent frontmatter: set `effort` in a skill or subagent markdown file"). Un agente
+  `claude-code-guide` había devuelto primero una respuesta con un model id inventado
+  (`claude-opus-4-7-20250219`, no existe en esta familia) — no se aplicó el cambio hasta confirmarlo
+  con `WebFetch` contra la doc oficial
+- Resultado: 8 archivos modificados, `+1` línea cada uno. No compila/testea nada (no es código de
+  producto), no requiere `judge`
+- Qué falló o costó más de lo esperado: el primer intento de verificación (subagente) alucinó un
+  dato concreto y verificable (model id) dentro de una respuesta por lo demás correcta — no descartar
+  la respuesta entera, pero **no dar por buena una cita de model id/nombre de campo sin contrastarla**
+  cuando viene de un subagente que no citó la fuente primero
+- Aprendizaje: `effort` en frontmatter pisa el effort de la sesión principal salvo por
+  `CLAUDE_CODE_EFFORT_LEVEL` (env var). Cambiar el effort de la sesión principal (PowerShell) no es
+  editable por archivo — es `/effort <nivel>` interactivo, `--effort` al lanzar, o `effortLevel` en
+  `settings.json` para persistirlo; se dejó en `high` sin cambios (orquesta el reparto de agentes y
+  la precedencia query→command→compile→exec)
+- Checkpoint: cambio de proceso cerrado, nada en vuelo — punto seguro para `/clear` si se quiere
