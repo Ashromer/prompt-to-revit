@@ -677,3 +677,45 @@ con este fichero en cuanto esa PR se mergee. Aquí solo el resumen y el paso fin
   `specify→plan→implement` formal
 - Checkpoint: `dev` con 15 commits de esta sesión, todos pusheados. Nada en vuelo. Documentación
   (`specs/roadmap.md`) actualizada en el mismo checkpoint.
+
+## [2026-08-18] Judge del lote de 24 comandos nuevos — PASS, 1 fix menor, cierre de la sesión
+
+- Agentes usados: `judge` (lanzado en segundo plano a petición del usuario: "lanza y me espero a
+  que acabes")
+- Petición del usuario: cerrar la sesión de hoy solo tras un `judge` sobre los 24 comandos añadidos
+  en los 5 lotes anteriores, que nunca habían pasado por revisión independiente
+- Veredicto: **PASS**, sin hallazgos bloqueantes. El `judge` no tenía Bash esta vez (a diferencia de
+  la revisión de esta mañana) y dejó el PASS condicionado explícitamente a que el orquestador
+  confirmara build+test — ya se venía confirmando lote a lote durante la implementación, se
+  reconfirmó una vez más de forma consolidada tras el veredicto: Debug y Release limpios,
+  `dotnet test` 111/111
+- Verificado correcto por el judge, sin necesidad de tocar nada: régimen de aprobación de los 24
+  comandos (masiva vs. preexistente vs. sin aprobación) categorizado correctamente en los tres
+  casos; patrón de try/catch por elemento (el bug corregido dos veces esta mañana) aplicado bien en
+  todos los `*Masivo`, sin regresión; sin colisiones de nombre entre los 55 comandos; sin
+  contradicciones entre el uso real de cada API nueva y su propio comentario in-code; la base
+  ortonormal del `Transform` de `CrearVistaSeccion` es matemáticamente correcta (determinante 1,
+  right-handed) más allá del riesgo ya auto-señalado de orientación
+- 2 notas no bloqueantes, 1 corregida: `CrearVistaSeccion` no rechazaba `alturaMetros`/
+  `profundidadMetros` ≤0 (produciría un `BoundingBoxXYZ` degenerado con un error de Revit menos
+  claro que un `ArgumentException` explícito) — fix de una línea aplicada. `AplicarPlantillaDeVista`
+  sin `PreexistingElementGuard` se dejó tal cual: el propio judge confirmó que es consistente con el
+  precedente ya existente de `CambiarEscalaVista` (las vistas nunca han llevado ese guard en este
+  proyecto), no un hueco nuevo introducido hoy — es una decisión de diseño a revisar aparte
+  (¿deberían las vistas estar sujetas a §5.C.10?), no un bug de este lote
+- Qué falló o costó más de lo esperado: nada — el lote de 24 comandos, escrito sin
+  `code-developer`/`revit-developer` ni revisión previa, pasó limpio salvo el matiz menor de arriba.
+  Confirma que el proceso disciplinado seguido en los 5 lotes (firma verificada con
+  `MetadataLoadContext` antes de cada línea, patrón de aprobación aplicado por categoría de riesgo
+  no copiado sin pensar, try/catch por elemento replicado del fix de esta mañana) sí sostuvo la
+  calidad sin el ciclo completo de agentes
+- Aprendizaje: un lote grande (24 comandos, 5 commits) escrito con disciplina explícita
+  (verificar→implementar→build→test→commit por lote pequeño) puede pasar un `judge` limpio sin pasar
+  antes por `code-developer`/`revit-developer` — pero el propio judge señala que eso no sustituye la
+  revisión independiente, solo la confirma a posteriori; seguir pidiéndola es lo que la hizo valer
+  la pena hoy (encontró la nota de `CrearVistaSeccion`, aunque no bloqueante)
+- Checkpoint de cierre de sesión: `dev` con 17 commits de esta sesión, todos pusheados. Build
+  Debug+Release limpio, `dotnet test` 111/111, sin hallazgos bloqueantes pendientes. Nada en vuelo.
+  Pendiente real para la próxima sesión, sin cambios respecto a lo ya anotado: (1) registrar el
+  servidor MCP en Claude Code, (2) toda la verificación en Revit vivo acumulada — hoy son 55
+  comandos en catálogo, ninguno probado en un Revit real todavía.
