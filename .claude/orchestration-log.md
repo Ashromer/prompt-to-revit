@@ -139,3 +139,59 @@ Formato por entrada — una por lote/feature cerrado, añadida por quien orquest
   `settings.json` para persistirlo; se dejó en `high` sin cambios (orquesta el reparto de agentes y
   la precedencia query→command→compile→exec)
 - Checkpoint: cambio de proceso cerrado, nada en vuelo — punto seguro para `/clear` si se quiere
+
+## [2026-08-18] Auditoría Tier 1/2/3 + fix (rama aparte) + sesión architect F3.1 + consolidación
+
+Nota: esta entrada resume una sesión larga cuyo detalle línea a línea vive en el historial de
+`.claude/orchestration-log.md` de la rama `fix/tier1-tier2-safeguard-gaps` (PR #7) — se fusionará
+con este fichero en cuanto esa PR se mergee. Aquí solo el resumen y el paso final de consolidación.
+
+- Agentes usados: `architect` (sesión de diseño para F3.1, aislada en worktree, PASS con borrador
+  de ADR-011 + plan.md de 7 pasos)
+- Alcance: (1) auditoría completa de Tier 1/2/3 hecho por otra CLI (Antigravity) mientras esta
+  sesión estaba fuera por límite de uso — 5 hallazgos críticos en Tier 1 (`SessionLog` desconectado
+  de `/exec`, `/rollback` sin ADR-006, `ids_creados` descartado, `SyntaxGuard` esquivable, F2.5 sin
+  aplicar en un comando) y 2 en Tier 2 (`/command` sin logging, sin test E2E de catálogo),
+  corregidos y verificados con tests nuevos (82→91 en la rama del fix, no fusionada todavía en
+  `dev`); (2) sesión de `architect` para F3.1 (decisión: sin BD vectorial en v1, dato dinámico ya
+  cubierto por `/command`, dato estático como corpus a mano); (3) consolidación final tras el cierre
+  de Antigravity
+- Restricción real durante toda la sesión: Antigravity seguía committeando y editando en vivo en
+  `dev`, en el MISMO directorio de trabajo (sin worktree propio). Confirmado dos veces: un commit
+  nuevo (`c9fd482`) apareció entre dos `git log` consecutivos, y más tarde un `git checkout` a la
+  rama del fix arrastró edición sin commitear de Antigravity (`ModelingCommands.cs` +
+  `tests/VLM Test 1/`). Todo el trabajo de esta sesión que no era auditoría de solo lectura se hizo
+  en `git worktree` separados (`.worktrees/fix-tier1-tier2-safeguard-gaps`, y el worktree propio del
+  agente `architect`) para no pisar nada en tiempo real — nunca se tocó el directorio principal
+  mientras Antigravity podía estar escribiendo en él
+- Consolidación (este paso, con Antigravity ya cerrado, confirmado por el usuario): (a) inspeccionado
+  todo lo que Antigravity dejó sin commitear en `dev` — 3 comandos nuevos reales y verificados en
+  Revit vivo (`CrearForjadosMasivo`, `CrearNivel`, `CrearVistaPlanta`) más notas de bugs conocidos y
+  una validación de arquitectura en `DOCUMENTACION.md`, insertadas rompiendo el flujo del documento
+  (header huérfano "Tier 4: Headless... (Planificado)" sin contenido, notas a media Sección 2). (b)
+  Commitados los comandos (compilan Debug+Release limpio, 69/69 tests) y reescrita la Sección 9 de
+  `DOCUMENTACION.md` con el estado real tier a tier, más `specs/roadmap.md` con el mismo estado y
+  las notas de auditoría de Tier 1/2. (c) `.gitignore` ampliado: `.claude/worktrees/` (mismo patrón
+  que `.worktrees/`), `.agents/` (config MCP local de Antigravity con ruta absoluta de esta máquina),
+  `scratch/` (scripts de prueba manual del pipe — reales y útiles, pero personales, no producto
+  revisado — `shoot.ps1` demuestra en vivo la coexistencia Tier1/Tier3 documentada en §9), y
+  `tests/VLM Test 1/` (un PDF binario con nombre de proyecto real que no pertenece al repo). (d)
+  Worktrees obsoletos de los PoCs de Fase 0 eliminados (`.worktrees/001-...`,
+  `.worktrees/002-...` — ambos ya mergeados en `dev` hace tiempo); el de `002-...` falló al borrar
+  el directorio físico por límite de longitud de ruta de Windows (metadata de git sí se limpió,
+  quedan ~2 ficheros huérfanos en disco, ya cubiertos por `.gitignore`, sin impacto)
+- Bloqueado, pendiente del usuario: `gh pr merge 7` lo bloqueó el clasificador de permisos del modo
+  automático (acción visible sobre GitHub) — la PR #7 está `MERGEABLE`/`CLEAN` contra el `dev`
+  actual, solo falta que el usuario la mergee (o autorice el comando)
+- Verificación: Debug+Release limpios y 69/69 tests en `dev` tras el commit de consolidación
+  (`6385b33`), pusheado. La rama del fix sigue en 91/91 propios, pendiente de fusionar
+- Aprendizaje: cuando dos sesiones comparten el mismo directorio de trabajo sin coordinarse, la
+  disciplina real no es "evitar tocar los mismos ficheros" (imposible de garantizar de antemano) —
+  es "nunca editar el directorio principal si hay señales de actividad en vivo (commits nuevos entre
+  comprobaciones, ficheros sin commitear al hacer `checkout`), y mover el propio trabajo a un
+  worktree en cuanto se detecta". Este repo ya tenía el patrón de worktrees de los PoCs; reutilizarlo
+  fue más barato que inventar una convención nueva
+- Checkpoint: `dev` limpio y pusheado, nada en vuelo salvo la PR #7 (mergeable, esperando al
+  usuario) y el borrador de ADR-011/plan de F3.1 (en el worktree del agente `architect`, esperando
+  revisión del usuario antes de aplicarse a `specs/tech-spec.md`). Punto razonablemente seguro para
+  `/clear` una vez se resuelvan esos dos pendientes
