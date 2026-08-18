@@ -278,17 +278,22 @@ nunca como si la operación se hubiera cancelado.
 
 ## 6. Registro y aprendizaje
 
-Cada ejecución deja una línea en `%APPDATA%\RevitBridge\log\YYYY-MM.jsonl`:
+Cada ejecución deja **dos líneas correlacionadas por un `id`** en `%APPDATA%\RevitBridge\log\YYYY-MM.jsonl`
+(implementado en F0.7, `SessionLog`): no se puede mutar una línea ya escrita en un fichero
+append-only, así que "antes" y "después" son dos eventos, no una línea reescrita.
 
 ```json
-{"ts":"2026-08-17T10:32:11","intencion":"crear niveles cada 3 m","via":"roslyn",
- "fuente":"...","fase":"runtime","ok":false,
+{"id":"a1b2...","ts":"2026-08-17T10:32:11Z","evento":"inicio","intencion":"crear niveles cada 3 m","via":"roslyn","fuente":"...","sesion":"..."}
+{"id":"a1b2...","ts":"2026-08-17T10:32:11Z","evento":"fin","fase":"runtime","ok":false,
  "error":"InvalidOperationException: The level already exists at this elevation",
  "ids_creados":[],"duracion_ms":340}
 ```
 
-La línea se escribe **antes** de ejecutar y se completa después. Es también la fuente de verdad de
-`/rollback` (C.13), así que no es solo telemetría: es estructura.
+La línea de `evento: inicio` se escribe **antes** de ejecutar; la de `evento: fin` la completa
+después. Si Revit cae a media ejecución, la línea de inicio huérfana **es** la evidencia de qué lo
+tumbó — el mismo efecto que perseguía "una línea que se completa", con un fichero que sí se puede
+escribir en append-only puro. Es también la fuente de verdad de `/rollback` (C.13): se reconstruye
+correlacionando `id` y filtrando por `sesion`, así que no es solo telemetría: es estructura.
 
 Dos productos derivados:
 

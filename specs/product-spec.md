@@ -207,15 +207,15 @@ defecto razonable y el addin genera lo que falta.
 
 | Variable | Default | Description |
 |---|---|---|
-| `puerto` | `8765` | Puerto del listener. Siempre en `127.0.0.1`; no es configurable a otra interfaz |
-| `token` | generado | Token exigido en cabecera. Si no existe, el addin lo genera y lo escribe en el fichero |
-| `timeout_ms` | `30000` | Espera máxima de la petición HTTP antes de devolver error. No cancela la ejecución en Revit: Revit es monohilo y no hay timeout real |
+| `nombre_pipe` | derivado del usuario y la sesión | Nombre del named pipe. Sin puerto, sin token: la autorización la hace el ACL de usuario del sistema operativo (ADR-002) |
+| `timeout_ms` | `30000` | Espera máxima del puente antes de devolver error de protocolo. No cancela la ejecución en Revit: Revit es monohilo y no hay timeout real |
 | `dir_log` | `%APPDATA%\RevitBridge\log\` | Destino del registro JSONL |
 | `aprobacion_exec` | `manual` | Nivel de aprobación de `/exec`. En la v1 solo admite `manual` |
 | `max_tam_snippet` | — | Tamaño máximo del snippet aceptado. Pendiente de calibrar con uso real |
 
-**Mínimo para arrancar: cero variables.** El addin funciona con los valores por defecto y genera el
-token en el primer arranque. Los nombres son provisionales hasta el TechSpec.
+**Mínimo para arrancar: cero variables.** El addin funciona con los valores por defecto. Fichero en
+`%APPDATA%\RevitBridge\config.json`; `REVITBRIDGE_CONFIG` y `REVITBRIDGE_PIPE` son variables de
+entorno opcionales para pruebas (ver TechSpec §Deployment).
 
 ---
 
@@ -225,8 +225,9 @@ token en el primer arranque. Los nombres son provisionales hasta el TechSpec.
 
 Dos niveles, porque comprueban cosas distintas:
 
-- **Listener vivo** — `GET /commands` responde 200 con el catálogo. Confirma que el addin está
-  cargado y el hilo del listener escucha. **No** confirma que Revit pueda ejecutar nada.
+- **Listener vivo** — el cliente conecta al named pipe y pide `/commands`; responde con el catálogo.
+  Confirma que el addin está cargado y el hilo del listener escucha. **No** confirma que Revit pueda
+  ejecutar nada.
 - **Ida y vuelta completa** — un `/query` trivial (el nombre del documento activo) que atraviesa el
   `ExternalEvent`. Es el único healthcheck real: confirma que Revit está ocioso y respondiendo. Si
   este se agota por timeout con el anterior en verde, Revit está ocupado o con un diálogo abierto —
@@ -234,13 +235,16 @@ Dos niveles, porque comprueban cosas distintas:
 
 ### Logging
 
-Una línea JSON por ejecución en `%APPDATA%\RevitBridge\log\YYYY-MM.jsonl`, con la intención, la vía
-usada, la fuente, la fase, el resultado, los ids creados y la duración.
+**Dos líneas JSON correlacionadas por un `id`** por ejecución (`evento: inicio` / `evento: fin`) en
+`%APPDATA%\RevitBridge\log\YYYY-MM.jsonl` — un fichero append-only no permite reescribir una línea
+ya escrita, así que "antes" y "después" son dos eventos. La de inicio lleva la intención, la vía y
+la fuente; la de fin, la fase, el resultado, los ids creados y la duración.
 
 Dos reglas que no son negociables:
 
-- **Se escribe antes de ejecutar**, no después. Si Revit cae, tiene que quedar la evidencia de qué
-  lo tumbó — que es precisamente el caso en el que un log escrito después no existe.
+- **La línea de inicio se escribe antes de ejecutar**, no después. Si Revit cae, esa línea huérfana
+  es la evidencia de qué lo tumbó — que es precisamente el caso en el que un log escrito después no
+  existe.
 - **El error se registra completo**, con la traza y el tipo de excepción. Un log que dice "falló" no
   sirve para nada, y es lo que se obtiene por defecto con la mitad de las excepciones de la API.
 
@@ -254,8 +258,8 @@ conocimiento general aporta y es el modo de fallo principal del modelo.
 
 | Deliverable | Description |
 |:---:|---|
-| 🔌 **Addin de Revit** | Listener HTTP, compilación en memoria, `ExternalEvent`, transacciones, ventana de aprobación y registro. Es el único componente que toca la API |
-| 🌐 **Servidor MCP** | Node/TypeScript. Declaración de herramientas con esquemas, transporte stdio, cliente HTTP contra el addin, propagación íntegra de errores |
+| 🔌 **Addin de Revit** | Listener de named pipe, compilación en memoria, `ExternalEvent`, transacciones, ventana de aprobación y registro. Es el único componente que toca la API |
+| 🌐 **Servidor MCP** | C# / .NET 8, `.exe` autocontenido. Declaración de herramientas con esquemas, transporte stdio, cliente de named pipe contra el addin, propagación íntegra de errores (ADR-001) |
 | 📚 **Commandset** | Catálogo de comandos compilados, poblado por graduación de lo que se usa. Parte se adopta de `mcp-servers-for-revit` |
 | 🧰 **DLL de utilidades** | Referenciada en cada compilación, para que el código generado invoque lo ya probado en vez de re-derivarlo y repetir errores resueltos |
 | 🧠 **Corpus acumulado** | Registro JSONL + las entradas destiladas a `revit_api_knowledge.md`. Es lo que hace que la siguiente sesión empiece más arriba |
@@ -273,16 +277,18 @@ conocimiento general aporta y es el modo de fallo principal del modelo.
 > │   ├── tech-spec.md                 # el cómo técnico
 > │   └── roadmap.md                   # fases y dependencias
 > ├── src/
+> │   ├── RevitBridge.Core/            # contrato de mensajes compartido, sin Revit ni Windows
 > │   ├── RevitBridge.Addin/           # el único componente que toca la API de Revit
 > │   │   ├── App.cs                   # IExternalApplication, arranque del listener
 > │   │   ├── Bridge/                  # listener, Roslyn, filtro sintáctico, ExternalEvent
-> │   │   ├── Commands/                # commandset compilado
+> │   │   ├── Adapters/                # RevitContext, costura de abstracción
 > │   │   ├── UI/                      # ventana de aprobación, modeless
 > │   │   └── RevitBridge.Addin.csproj
-> │   ├── RevitBridge.Utils/           # utilidades probadas, referenciadas en cada compilación
-> │   └── mcp-server/                  # Node/TypeScript
-> │       ├── src/tools/               # declaración de herramientas y esquemas
-> │       └── package.json
+> │   ├── RevitBridge.Utils/           # commandset compilado y utilidades probadas
+> │   └── RevitBridge.Mcp/             # C#, .exe autocontenido win-x64
+> │       └── RevitBridge.Mcp.csproj
+> ├── tests/
+> │   └── RevitBridge.Tests/           # xUnit, capa sin Revit
 > ├── .claude/
 > │   ├── agents/                      # revit-developer, mcp-developer + catálogo aisy
 > │   └── skills/                      # revit-bridge, revit-api-2026, harvest-bridge-log

@@ -52,6 +52,9 @@ explícita de iteraciones.
   coincidir exactamente con `namespace.ClassName`
 - Conocimiento acumulado de la API: `C:\Users\Usuario\.claude\revit_knowledge\revit_api_knowledge.md`.
   Leerlo antes de escribir código de Revit; actualizarlo al final de cada sesión con lo nuevo.
+- `dotnet build`/`dotnet test` siempre con `-v q --nologo` (o `--logger "console;verbosity=quiet"`
+  en test). Suprime ruido de MSBuild sin ocultar errores ni warnings; ahorra tokens tanto al
+  orquestador como a cualquier subagente que lo ejecute.
 
 ## Reparto de agentes
 
@@ -69,16 +72,33 @@ esperado en este proyecto:
 
 No inventar nombres de agente: solo los que existen en `.claude/agents/`.
 
+**Fan-out por riesgo, no por defecto** (piloto en Tier 0, ver `specs/roadmap.md`): `architect` solo
+cuando queda una decisión de diseño abierta (Tier 1+, §9); en features ya cerradas fila por fila en
+el roadmap, ir directo al dev de dominio + `judge`. Agrupar features de bajo riesgo del mismo tier
+en un solo ciclo `specify → plan → implement` en vez de uno por feature, y saltar `clarify-feature`
+cuando la fila del roadmap no deja gap. `clean-feature` se difiere a un pase por tier, no por
+feature. Cada lote cerrado deja una línea en `.claude/orchestration-log.md`; `/harvest-orchestration-
+log` decide si la agrupación pasa al siguiente tier o se ajusta.
+
+**Checkpoint de `/clear` al cierre de cada lote.** No hay herramienta para que Claude limpie el
+contexto por sí mismo — es un comando de CLI, solo lo lanza el usuario. En cuanto un lote cierra
+(`judge` en PASS, tests en verde, entrada escrita en `.claude/orchestration-log.md`), Claude debe
+avisar explícitamente "lote cerrado, seguro hacer `/clear`" en vez de asumir que el usuario se
+acuerda de preguntar. Es el único momento seguro: nada queda en vuelo que se pueda perder, y el
+estado para retomar ya vive en `orchestration-log.md` + `roadmap.md` + este fichero, no en el
+historial de la conversación.
+
 ## Skills propias de este proyecto
 
-Además del catálogo `aisy.*` (flujo Spec-Driven), hay tres skills ad-hoc que **no** vienen del
+Además del catálogo `aisy.*` (flujo Spec-Driven), hay cuatro skills ad-hoc que **no** vienen del
 catálogo y que el instalador no sobrescribe:
 
 | Skill | Cuándo se activa |
 |---|---|
 | `/revit-bridge` | Cualquier petición que implique leer, crear o modificar algo en el modelo abierto. Impone la escalera `query → command → compile → exec`, el contrato del snippet, los niveles de aprobación y el triaje de errores por `fase` |
 | `/revit-api-2026` | Cualquier tarea que toque la API de Revit. Carga el conocimiento acumulado antes de escribir código, y las roturas de API por versión y colisiones de tipos |
-| `/harvest-bridge-log` | Cosechar el log JSONL: qué snippets graduan a comando compilado y qué errores recurrentes van a `revit_api_knowledge.md` (§6) |
+| `/harvest-bridge-log` | Cosechar el log JSONL del **producto**: qué snippets graduan a comando compilado y qué errores recurrentes van a `revit_api_knowledge.md` (§6) |
+| `/harvest-orchestration-log` | Cosechar `.claude/orchestration-log.md`, el log del **proceso** de desarrollo (specify/plan/implement): qué saltos de ceremonia funcionan y cuáles hay que revertir |
 
 Ninguna duplica reglas: `DOCUMENTACION.md` y `revit_api_knowledge.md` siguen siendo las fuentes
 únicas, las skills son el procedimiento.

@@ -1,0 +1,25 @@
+name: Tier 0 - Build y tests (RevitBridge)
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Build RevitBridge.sln (Debug)
+        run: dotnet build src/RevitBridge.sln -c Debug -v q --nologo
+
+      - name: Build RevitBridge.sln (Release)
+        run: dotnet build src/RevitBridge.sln -c Release -v q --nologo
+
+      - name: Test RevitBridge.Tests
+        run: dotnet test tests/RevitBridge.Tests/RevitBridge.Tests.csproj --logger "console;verbosity=quiet" --nologo

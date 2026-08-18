@@ -98,6 +98,32 @@ Ninguno de los dos lleva estimación: el TechSpec no las incluye y no se inventa
 
 Levanta el andamiaje completo y **todo lo que no escribe en el modelo**. Al cerrar este tier la pasarela ya es útil: Claude puede consultar el documento abierto, resolver `ElementId` reales y listar el catálogo, que es el paso obligatorio previo a cualquier escritura según la regla de precedencia de `CLAUDE.md`. Nada en este tier abre una `Transaction`, así que el riesgo sobre el modelo es nulo.
 
+> [!info] Agrupación de ejecución (piloto de optimización de tokens, 2026-08-18)
+> Las 11 features de este tier ya están completamente especificadas fila por fila (feature +
+> depends-on + nota) por este roadmap y por `specs/tech-spec.md` — sin ambigüedad que interrogar.
+> Ejecutar `specify → clarify → plan → implement → clean` completo 11 veces es ceremonia
+> desproporcionada al riesgo de este tier (nada abre `Transaction`). Se ejecuta agrupado en 3 lotes
+> por el grafo de dependencias, con `clarify-feature` omitido en los tres (sin gap que cerrar) y
+> `clean-feature` diferido a un único pase al final del tier en vez de uno por lote:
+>
+> - **Lote A — Andamiaje** (F0.1, F0.2, F0.7): monorepo+CI, contrato de `Core`, `SessionLog`. Sin
+>   Revit API, mecánico. Fan-out: `code-developer` → `judge` → `tester`. Sin `architect` (no hay
+>   decisión de diseño abierta, el tech-spec ya la tomó).
+> - **Lote B — Addin y transporte** (F0.3, F0.4, F0.5, F0.9): pipe, addin mínimo, cola
+>   `ExternalEvent`, catálogo de comandos. Fan-out: `revit-developer` → `judge` → `tester`. Sin
+>   `architect`: el riesgo real aquí es de implementación (hilo correcto, `ExternalEvent`), no de
+>   diseño, y ese riesgo lo cubre `judge` releyendo contra §5, no una fase de discovery previa.
+> - **Lote C — Lectura extremo a extremo** (F0.6, F0.8, F0.10, F0.11): adaptador `RevitContext`,
+>   consulta, puente MCP, healthcheck. Primer punto donde dos lados (`revit-developer` +
+>   `mcp-developer`) implementan contra el mismo contrato — fan-out: ambos en paralelo → `judge` →
+>   `tester`. Tampoco `architect`: el contrato ya salió cerrado del Lote A.
+>
+> Si `judge` devuelve `CHANGES_REQUESTED` por un problema de diseño (no de implementación) en
+> cualquier lote, es la señal de que el salto de `architect` fue incorrecto para ese lote — se
+> reincorpora para el resto del tier, no se fuerza a mano. Cada lote cerrado deja una entrada en
+> `.claude/orchestration-log.md`; `/harvest-orchestration-log` al final del tier decide si esta
+> agrupación pasa a Tier 1 o se ajusta primero.
+
 | # | Feature | Depends on | Notes |
 |---|---|---|---|
 | F0.1 | Monorepo, solución y CI: los cinco proyectos del grafo de módulos, `dotnet build` en Debug y Release, workflow que compila y testea | PoC #2 | El CI depende del paquete de metadatos |
