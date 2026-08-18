@@ -440,27 +440,45 @@ Revit 2026.
 
 ## 9. Estado y plan
 
-El plan de construcción está en `specs/roadmap.md`: **Fase 0 con dos PoCs bloqueantes**, y luego
-tres tiers de complejidad creciente (fundamentos y lectura → ejecución con salvaguardas → catálogo
-y ciclo de aprendizaje).
+El plan de construcción está en `specs/roadmap.md`, que es la fuente de verdad del **estado**
+tier a tier (esta sección resume, no duplica — si discrepan, manda `specs/roadmap.md`).
 
-Los dos PoCs bloquean el arranque porque cada uno valida un ADR del que depende la estructura
-completa:
+- [x] **Fase 0 — PoC #1 (SDK oficial de MCP) y PoC #2 (paquete NuGet de metadatos)**, ambos
+      cerrados en positivo. ADR-001 y ADR-008 confirmados.
+- [x] **Tier 0 — fundamentos y lectura**, cerrado.
+- [x] **Tier 1 — ejecución con salvaguardas**, cerrado. Auditoría del 2026-08-18 encontró y
+      corrigió 5 huecos reales entre lo documentado en §5 y la implementación (`SessionLog` nunca
+      conectado a `/exec`, `/rollback` sin reconstrucción desde el JSONL, valor de retorno del
+      script descartado, `SyntaxGuard` incompleto, una vía de modificación de preexistentes sin
+      aprobación) — ver `.claude/orchestration-log.md`, entradas de esa fecha.
+- [x] **Tier 2 — catálogo y ciclo de aprendizaje**, cerrado tras la misma auditoría (gaps F2.1/F2.3:
+      `/command` no logueaba, sin test E2E de catálogo).
+- [~] **Tier 3 — modelado asistido por agentes y VLM**, en progreso. Catálogo parcial ya construido
+      y verificado en Revit vivo (ver nota de validación abajo), con bugs conocidos pendientes:
+  - `CrearMurosMasivo`: los muros se generan en los niveles correctos pero aparecen solapados
+    volumétricamente — no se asigna `Top Constraint`/`Top Offset`, así que Revit usa una altura no
+    conectada por defecto que interfiere con niveles superiores.
+  - `CrearForjadosMasivo`: los forjados no se generan en el lienzo — probable fallo silencioso de
+    validación del `CurveLoop` (debe ser continuo, cerrado, sin autointersecciones) o ausencia de
+    un `FloorType` por defecto válido en la plantilla al resolverlo por `FilteredElementCollector`.
+  - F3.1 (Contexto Denso): diseño resuelto (borrador de ADR-011, pendiente de aprobación del
+    usuario antes de aplicarlo a `specs/tech-spec.md`) — sin BD vectorial en v1, dato dinámico ya
+    cubierto por `/command` existente (`ExportarContextoMasivo`, `ExportarGrafoTopologico`), dato
+    estático (CTE/metodologías) como corpus curado a mano, mismo patrón que
+    `revit_api_knowledge.md`.
+- [ ] **Tier 4 — headless & batch processing**, no iniciado. Contradice una decisión ya tomada en
+      `specs/roadmap.md` (*Out of Roadmap → Distribución al estudio*: cambiaría la salvaguarda
+      principal de revisión humana por operación) — requiere resolver esa tensión antes de
+      orquestar nada, no es una extensión mecánica de Tier 3.
 
-- [ ] **PoC #1 — SDK oficial de MCP para .NET.** Si falla, el puente vuelve a Node y TypeScript y
-      ADR-004 se rehace en cascada. Requisitos en `specs/001-poc-1-sdk-oficial-de-mcp-para-net/`.
-- [ ] **PoC #2 — Paquete NuGet de metadatos de la API.** Si falla, desaparece el CI y la
-      distribución exige Revit instalado para compilar.
+### Validación en vivo (2026-08-18)
 
-Lo que estaba pendiente en la versión anterior y ya está resuelto:
-
-- [x] Flujo de trabajo del día a día → skill `/revit-bridge` y la regla de precedencia de `CLAUDE.md`
-- [x] `CLAUDE.md` del proyecto con la precedencia commandset → Roslyn
-- [x] Esqueleto del addin → módulos en `specs/tech-spec.md` §Module Design, construcción ordenada
-      en el Tier 0 del roadmap
-- [x] Servidor MCP y declaración de herramientas → decidido C# con SDK oficial, pendiente de
-      validar en el PoC #1
-- [x] Conjunto inicial de comandos `/query` → F2.2 del roadmap, derivado de la lista de §7
+Primera confirmación real en Revit vivo (no solo "compila y los tests pasan") de que las dos vías
+conviven según el diseño de §3: un script Roslyn (`/exec`) invocado desde fuera de Claude Code
+(cliente de pipe manual en PowerShell, sustituto de curl que §2 ya preveía) renombró hojas de
+plano con lógica arbitraria en tiempo real, sin cerrar Revit ni recompilar el addin, mientras el
+catálogo de Tier 2/3 seguía disponible para el resto de operaciones. Confirma R1 y R2 en la
+práctica, no solo en el diseño.
 
 ---
 

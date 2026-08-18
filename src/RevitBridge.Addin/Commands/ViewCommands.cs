@@ -38,6 +38,30 @@ public static class ViewCommands
         return new { Id = nuevaVistaId.Value, Nombre = nuevaVista?.Name };
     }
 
+    [ComandoRevit("CrearVistaPlanta")]
+    public static object CrearVistaPlanta(Document doc, int nivelId)
+    {
+        var level = doc.GetElement(new ElementId(nivelId)) as Level;
+        if (level == null) throw new ArgumentException("Nivel no encontrado");
+
+        var viewFamilyType = new FilteredElementCollector(doc)
+            .OfClass(typeof(ViewFamilyType))
+            .Cast<ViewFamilyType>()
+            .FirstOrDefault(vft => vft.ViewFamily == ViewFamily.FloorPlan);
+
+        if (viewFamilyType == null) throw new InvalidOperationException("No se encontró ViewFamilyType para FloorPlan");
+
+        ViewPlan? nuevaVista = null;
+        using (var tx = new Transaction(doc, "Crear Vista Planta MCP"))
+        {
+            tx.Start();
+            nuevaVista = ViewPlan.Create(doc, viewFamilyType.Id, level.Id);
+            tx.Commit();
+        }
+
+        return new { Id = nuevaVista.Id.Value, Nombre = nuevaVista.Name };
+    }
+
     [ComandoRevit("CambiarEscalaVista")]
     public static object CambiarEscalaVista(Document doc, int vistaId, int nuevaEscala)
     {
