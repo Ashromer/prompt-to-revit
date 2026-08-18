@@ -268,6 +268,17 @@ toque (verificar contra el paquete NuGet exacto antes de codificar, no asumir la
 
 **Orden recomendado** (más barato → más caro, y respetando dependencias): `ObtenerTiposCargadosPorCategoria` → `BuscarTiposDeMuroPorFuncion` + parámetro `tipoMuroId` en `CrearMurosMasivo` (tabiques, prácticamente gratis) → `CrearAberturasMasivo` → `ColocarMobiliarioMasivo` → resolver la pregunta de carga de familias → `CrearTejadoExtrusion` → `CrearTejadoPorHuella`.
 
+> [!info] Estado (2026-08-18) — implementados a nivel 1 (compila Debug+Release), pendiente nivel 3 (Revit vivo)
+> `ObtenerTiposCargadosPorCategoria`, `BuscarTiposDeMuroPorFuncion` + `tipoMuroId` en
+> `CrearMurosMasivo`, `CrearAberturasMasivo`, `ColocarMobiliarioMasivo`, `CrearTejadoExtrusion` y
+> `CrearTejadoPorHuella` — los seis en `ModelingCommands.cs`/`BaseCommands.cs`. Las firmas de
+> `NewExtrusionRoof`/`NewFootPrintRoof`/`NewReferencePlane` y los indexadores `DefinesSlope`/
+> `SlopeAngle[ModelCurve]` se verificaron por reflexión directa contra el DLL de metadatos del
+> paquete NuGet (`Nice3point.Revit.Api.RevitAPI` 2026.4.10) antes de escribir el código, con
+> `System.Reflection.MetadataLoadContext` — no se asumieron de memoria. Sigue pendiente: la
+> pregunta de carga de familias desde disco (sin resolver a propósito), y confirmación en Revit
+> vivo de los dos comandos de tejado en particular (geometría nunca antes probada en este proyecto).
+
 Cada uno por su ciclo normal (`revit-developer` + `judge`, sin `architect` salvo que al implementar aparezca una decisión de diseño no prevista aquí) — no agrupados en un solo lote: son API de Revit distintas entre sí (host-based vs. free-standing vs. roof sketching), el riesgo de implementación no es uniforme.
 
 ## Tier 4: Headless & Batch Processing (Minería de Datos en la Sombra)

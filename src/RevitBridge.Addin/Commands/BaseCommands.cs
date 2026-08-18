@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Autodesk.Revit.DB;
@@ -69,5 +70,59 @@ public static class BaseCommands
             Id = e.Id.Value,
             Nombre = e.Name
         }).Take(100).ToList();
+    }
+
+    [ComandoRevit("ObtenerTiposCargadosPorCategoria")]
+    public static object ObtenerTiposCargadosPorCategoria(Document doc, string nombreCategoria)
+    {
+        // Base para F3.7 (backlog "casa completa"): puertas/ventanas/mobiliario se colocan por
+        // tipo real (FamilySymbol), nunca adivinando un nombre (§5.A.1) -- este comando resuelve
+        // qué tipos hay realmente cargados en el proyecto antes de intentar colocar nada.
+        var categorias = doc.Settings.Categories;
+        Category? targetCat = null;
+
+        foreach (Category cat in categorias)
+        {
+            if (cat.Name.Equals(nombreCategoria, System.StringComparison.OrdinalIgnoreCase))
+            {
+                targetCat = cat;
+                break;
+            }
+        }
+
+        if (targetCat == null) return new { error = $"Categoría '{nombreCategoria}' no encontrada." };
+
+        var tipos = new FilteredElementCollector(doc)
+            .OfCategoryId(targetCat.Id)
+            .WhereElementIsElementType()
+            .ToElements();
+
+        return tipos.Select(t => new
+        {
+            Id = t.Id.Value,
+            Nombre = t.Name,
+            Familia = (t as FamilySymbol)?.Family?.Name
+        }).Take(200).ToList();
+    }
+
+    [ComandoRevit("BuscarTiposDeMuroPorFuncion")]
+    public static object BuscarTiposDeMuroPorFuncion(Document doc, string funcion)
+    {
+        // Base para tabiques (F3.7): un tabique es un muro con Function=Interior, no un tipo de
+        // comando distinto -- CrearMurosMasivo ya acepta tipoMuroId, solo falta elegir el tipo real.
+        if (!Enum.TryParse<WallFunction>(funcion, ignoreCase: true, out var funcionEnum))
+        {
+            throw new ArgumentException(
+                $"Función de muro '{funcion}' no válida. Valores admitidos: {string.Join(", ", Enum.GetNames(typeof(WallFunction)))}");
+        }
+
+        var tipos = new FilteredElementCollector(doc)
+            .OfClass(typeof(WallType))
+            .Cast<WallType>()
+            .Where(wt => wt.Function == funcionEnum)
+            .Select(wt => new { Id = wt.Id.Value, Nombre = wt.Name })
+            .ToList();
+
+        return tipos;
     }
 }
