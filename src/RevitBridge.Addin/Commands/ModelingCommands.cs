@@ -512,6 +512,67 @@ public static class ModelingCommands
         return new { Id = nivelNuevo.Id.Value, Nombre = nivelNuevo.Name, ElevacionMetros = elevacionMetros };
     }
 
+    [ComandoRevit("CrearNivelesMasivo")]
+    public static object CrearNivelesMasivo(Document doc, string jsonNiveles)
+    {
+        // Extensión de CrearNivel para edificios de varias plantas (F3.7): en vez de N llamadas
+        // sueltas a CrearNivel, una lista y una sola aprobación agregada -- mismo motivo que
+        // ModificarParametrosMasivo sobre ModificarParametro.
+        var opciones = new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+        // Estructura esperada: [{"nombre":"Planta 1","elevacionMetros":0}, ...]
+        var listaNiveles = System.Text.Json.JsonSerializer.Deserialize<List<Dictionary<string, System.Text.Json.JsonElement>>>(jsonNiveles, opciones);
+
+        if (listaNiveles == null || listaNiveles.Count == 0) return new { Creados = 0 };
+
+        if (UmbralAprobacionCreacion.RequiereAprobacion(listaNiveles.Count))
+        {
+            var resumenCreacion = DeletionPreview.ConstruirResumen(
+                "crear en el documento", Enumerable.Repeat("Nivel", listaNiveles.Count));
+            var approvalCreacion = new RevitBridge.Addin.UI.ApprovalService();
+            if (!approvalCreacion.SolicitarAprobacion(resumenCreacion))
+                throw new InvalidOperationException("Creación masiva de niveles cancelada por el usuario.");
+        }
+
+        int creados = 0;
+        var idsCreados = new List<long>();
+        var errores = new List<string>();
+        using (var tx = new Transaction(doc, $"Batch Crear {listaNiveles.Count} Niveles"))
+        {
+            tx.Start();
+            foreach (var item in listaNiveles)
+            {
+                try
+                {
+                    if (!item.TryGetValue("elevacionMetros", out var elevacionEl))
+                    {
+                        errores.Add("Entrada sin 'elevacionMetros', omitida.");
+                        continue;
+                    }
+
+                    var nivel = Level.Create(doc, elevacionEl.GetDouble() / 0.3048);
+
+                    if (item.TryGetValue("nombre", out var nombreEl) && nombreEl.ValueKind == System.Text.Json.JsonValueKind.String)
+                    {
+                        var nombre = nombreEl.GetString();
+                        if (!string.IsNullOrWhiteSpace(nombre)) nivel.Name = nombre;
+                    }
+
+                    creados++;
+                    idsCreados.Add(nivel.Id.Value);
+                }
+                catch (Exception ex)
+                {
+                    // Nivel con la misma elevación (o nombre duplicado) es el fallo más probable --
+                    // Level.Name exige unicidad igual que Grid.Name.
+                    errores.Add(ex.Message);
+                }
+            }
+            tx.Commit();
+        }
+
+        return new { ElementosCreados = creados, Ids = idsCreados, ErroresOmitidos = errores.Count, Errores = errores };
+    }
+
     [ComandoRevit("BorrarElementosMasivo")]
     public static object BorrarElementosMasivo(Document doc, List<int> elementoIds)
     {

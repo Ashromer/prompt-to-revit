@@ -202,4 +202,28 @@ public static class ViewCommands
 
         return new { Id = seccion!.Id.Value, Nombre = seccion.Name };
     }
+
+    [ComandoRevit("CrearVista3D")]
+    public static object CrearVista3D(Document doc, string nombre = "")
+    {
+        // F3.7, extensión "casa completa". Firma verificada con MetadataLoadContext:
+        // View3D.CreateIsometric(Document, ElementId viewFamilyTypeId) es estática y real en
+        // 2026.4.10. Creación única, no masiva -- sin aprobación, mismo régimen que CrearVistaPlanta.
+        var viewFamilyType = new FilteredElementCollector(doc)
+            .OfClass(typeof(ViewFamilyType))
+            .Cast<ViewFamilyType>()
+            .FirstOrDefault(vft => vft.ViewFamily == ViewFamily.ThreeDimensional);
+        if (viewFamilyType == null) throw new InvalidOperationException("No se encontró ViewFamilyType para vista 3D.");
+
+        View3D? vista3D = null;
+        using (var tx = new Transaction(doc, "Crear Vista 3D MCP"))
+        {
+            tx.Start();
+            vista3D = View3D.CreateIsometric(doc, viewFamilyType.Id);
+            if (!string.IsNullOrWhiteSpace(nombre)) vista3D.Name = nombre;
+            tx.Commit();
+        }
+
+        return new { Id = vista3D.Id.Value, Nombre = vista3D.Name };
+    }
 }

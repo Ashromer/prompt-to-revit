@@ -73,4 +73,39 @@ public static class AnnotationCommands
 
         return new { ElementosEtiquetados = etiquetados, ErroresOmitidos = errores.Count, Errores = errores };
     }
+
+    [ComandoRevit("CrearTextoEnVista")]
+    public static object CrearTextoEnVista(Document doc, int vistaId, double xMetros, double yMetros, string texto, int tipoTextoId = 0)
+    {
+        // Creación única (una nota), no masiva -- sin aprobación, mismo régimen que CrearPlano/
+        // CrearVistaPlanta. Firma verificada con MetadataLoadContext: TextNote.Create(Document,
+        // ElementId viewId, XYZ position, string text, ElementId typeId) es real en 2026.4.10.
+        var vista = doc.GetElement(new ElementId(vistaId)) as View;
+        if (vista == null) throw new ArgumentException("Vista no encontrada.");
+
+        ElementId textTypeId;
+        if (tipoTextoId > 0)
+        {
+            textTypeId = new ElementId(tipoTextoId);
+        }
+        else
+        {
+            textTypeId = new FilteredElementCollector(doc).OfClass(typeof(TextNoteType)).FirstElementId();
+            if (textTypeId == ElementId.InvalidElementId)
+                throw new InvalidOperationException("No hay ningún TextNoteType disponible en el documento y no se especificó tipoTextoId.");
+        }
+
+        double m2ft = 1.0 / 0.3048;
+        var punto = new XYZ(xMetros * m2ft, yMetros * m2ft, 0);
+
+        TextNote? nota = null;
+        using (var tx = new Transaction(doc, "Crear Nota de Texto MCP"))
+        {
+            tx.Start();
+            nota = TextNote.Create(doc, vista.Id, punto, texto, textTypeId);
+            tx.Commit();
+        }
+
+        return new { Id = nota!.Id.Value, Texto = nota.Text };
+    }
 }

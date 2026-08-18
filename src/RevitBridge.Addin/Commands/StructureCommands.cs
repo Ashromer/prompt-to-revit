@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Autodesk.Revit.DB;
+using Autodesk.Revit.DB.Structure;
 using RevitBridge.Core;
 using RevitBridge.Utils;
 
@@ -69,6 +70,76 @@ public static class StructureCommands
 
                     creadas++;
                     idsCreadas.Add(grid.Id.Value);
+                }
+                catch (Exception ex)
+                {
+                    errores.Add(ex.Message);
+                }
+            }
+            tx.Commit();
+        }
+
+        return new { ElementosCreados = creadas, Ids = idsCreadas, ErroresOmitidos = errores.Count, Errores = errores };
+    }
+
+    [ComandoRevit("CrearColumnasMasivo")]
+    public static object CrearColumnasMasivo(Document doc, int nivelId, string jsonColumnas)
+    {
+        // Mismo patrón que ColocarMobiliarioMasivo (misma sobrecarga de NewFamilyInstance, ya
+        // verificada y en uso) -- solo cambia StructuralType.NonStructural por .Column, que deja a
+        // Revit fijar el nivel base/top automáticamente igual que hace con muros.
+        var nivel = doc.GetElement(new ElementId(nivelId)) as Level;
+        if (nivel == null) throw new ArgumentException("Nivel no encontrado.");
+
+        double m2ft = 1.0 / 0.3048;
+
+        // Estructura esperada: [{"tipoId": 123, "x": 1.0, "y": 2.0}, ...] -- tipoId de
+        // ObtenerTiposCargadosPorCategoria sobre "Structural Columns" o "Columns".
+        var opciones = new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+        var listaColumnas = System.Text.Json.JsonSerializer.Deserialize<List<Dictionary<string, double>>>(jsonColumnas, opciones);
+
+        if (listaColumnas == null || listaColumnas.Count == 0) return new { Creadas = 0 };
+
+        if (UmbralAprobacionCreacion.RequiereAprobacion(listaColumnas.Count))
+        {
+            var resumenCreacion = DeletionPreview.ConstruirResumen(
+                $"crear en el nivel '{nivel.Name}'", Enumerable.Repeat("Columna", listaColumnas.Count));
+            var approvalCreacion = new RevitBridge.Addin.UI.ApprovalService();
+            if (!approvalCreacion.SolicitarAprobacion(resumenCreacion))
+                throw new InvalidOperationException("Creación masiva de columnas cancelada por el usuario.");
+        }
+
+        int creadas = 0;
+        var idsCreadas = new List<long>();
+        var errores = new List<string>();
+        using (var tx = new Transaction(doc, $"Batch Crear {listaColumnas.Count} Columnas"))
+        {
+            tx.Start();
+            foreach (var item in listaColumnas)
+            {
+                try
+                {
+                    if (!item.TryGetValue("tipoId", out double tipoIdRaw) ||
+                        !item.TryGetValue("x", out double x) || !item.TryGetValue("y", out double y))
+                    {
+                        errores.Add("Entrada sin 'tipoId', 'x' o 'y', omitida.");
+                        continue;
+                    }
+
+                    var symbol = doc.GetElement(new ElementId((int)tipoIdRaw)) as FamilySymbol;
+                    if (symbol == null)
+                    {
+                        errores.Add($"El tipo {(int)tipoIdRaw} no es un FamilySymbol válido.");
+                        continue;
+                    }
+
+                    if (!symbol.IsActive) symbol.Activate();
+
+                    var punto = new XYZ(x * m2ft, y * m2ft, nivel.Elevation);
+                    var instancia = doc.Create.NewFamilyInstance(punto, symbol, nivel, StructuralType.Column);
+
+                    creadas++;
+                    idsCreadas.Add(instancia.Id.Value);
                 }
                 catch (Exception ex)
                 {
