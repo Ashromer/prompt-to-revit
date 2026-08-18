@@ -172,6 +172,20 @@ Cierra el bucle de §6: lo que se usa y se demuestra estable deja de improvisars
 
 **Criterio de cierre de Tier 2** — Existe un test E2E automatizado que invoca un comando compilado del catálogo a través del puente, verifica que el nombre coincide entre ambos lados, y cubre la vía de borrado con previsualización y la protección de preexistentes. Además, la cosecha del log produce un informe sobre un JSONL de prueba con candidatos y descartes justificados.
 
+## Tier 3: Modelado Asistido por Agentes y VLM (Visión-Lenguaje)
+
+Una vez completado el puente seguro (Tier 1) y el catálogo precompilado con salvaguardas (Tier 2), el Addin asume su rol definitivo: el "sistema nervioso periférico". El Tier 3 consiste en conectar el "cerebro" (Agentes externos) que orquesta procesos arquitectónicos utilizando este puente, apostando por procesos de inicio densos (cálculo/lectura lenta) para una latencia nula en la ejecución posterior.
+
+| Feature | Descripción | Dependencias | Notas |
+| :--- | :--- | :--- | :--- |
+| F3.1 | **Contexto Denso (Knowledge Base RAG):** Al abrir la sesión, se compila o inyecta el grafo topológico, metodologías y estándares BIM en una BD vectorial o System Prompt masivo. Inicialización lenta, ejecución "Zero-Shot" instantánea y sin alucinaciones normativas. | F2.1 | Responde a la necesidad de no descubrir metodologías en tiempo real. |
+| F3.2 | **Modelado VLM (Visual Language Models):** Desarrollo de un flujo donde el cliente MCP recibe un croquis/imagen (planta/axonometría), infiere el grafo espacial y deduce las coordenadas para lanzar ráfagas deterministas a `CrearMuroRecto` por el Pipe. | F2.1, F2.2 | Requiere integración multimodal (Claude 3.5 Sonnet / GPT-4o) en la terminal de inicio. |
+| F3.3 | **Auditoría Automática (QA/QC Agent):** Agente especializado que lee masivamente las propiedades (vía `ObtenerSeleccion` iterado) para validar el modelo contra el Código Técnico o estándares (ej. naming, alturas libres). | F2.2 | Ahorro masivo de tiempo de procesado y revisión humana. |
+| F3.4 | **Generación Paramétrica Híbrida:** El LLM en lugar de modelar, propone inputs a un generador C# de Grasshopper/Revit que calcula 1000 iteraciones (optimización de vistas/áreas) y escupe la óptima. | F2.1 | Une deducción LLM con cómputo bruto C#. |
+
+**Criterio de cierre de Tier 3** — Un flujo E2E donde el usuario sube un croquis JPG a su interfaz de chat, el VLM lo analiza normativamente contra la Knowledge Base pre-cargada, y lanza cientos de llamadas silenciosas al catálogo C#, generando el esqueleto del edificio completo en segundos.
+
+
 ## 🔗 Dependency Graph
 
 ```mermaid

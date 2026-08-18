@@ -17,6 +17,11 @@ Se detectaron y corrigieron crasheos críticos del proceso host (Revit) debidos 
 - **F2.1 y F2.2:** Invocación de catálogo funcional por reflexión e implementados comandos base de modelado y vistas.
 - **F2.4 y F2.5:** Previsualización implementada en borrados masivos, y protección automatizada mediante `DocumentChanged` que fuerza confirmación manual antes de modificar o borrar cualquier elemento que no haya sido creado durante la sesión actual (preexistentes).
 
+**Próximos Pasos (Arranque Tier 3):**
+- Implementar el indexado pesado "Contexto Denso" (RAG) en el arranque de la sesión (sacrificar tiempo de arranque por ejecución instantánea).
+- Diseñar el flujo de entrada VLM (Vision-Language) para la interpretación de imágenes y sketches.
+- Preparar scripts de auditoría QA/QC pre-empaquetados.
+
 ## PoC #1 — SDK oficial de MCP para .NET
 
 Cerrado en sesiones anteriores. ADR-001 confirmado, `ModelContextProtocol` 2.2.0. Ver
