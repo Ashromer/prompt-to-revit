@@ -710,3 +710,40 @@ Se listan para que el Lote 2 y el Lote 3 los ataquen a propósito, no por sorpre
 **No se activa.** Existen paquetes que cubren Revit 2026 completo exponiendo `RevitAPI` +
 `RevitAPIUI` (§2, §4), se ha elegido uno con versión exacta (§10) y **no procede el cierre en
 negativo del PoC en el Lote 1 ni el salto al Lote 5**. El Lote 2 continúa según `plan.md`.
+
+---
+
+## 15. Cierre — resultado de los Lotes 2, 3 y 4 (2026-08-18)
+
+> Añadido al terminar la verificación en Revit vivo. No modifica ninguna decisión de §9-§14, solo
+> confirma con hechos posteriores lo que ahí quedaba pendiente de comprobar.
+
+- **§13.1 (¿el ensamblado está realmente en `ref/`, no en `lib/`?) — falsado en positivo.** Tras
+  `dotnet build` sobre `PocRevitAddin.Nuget.csproj`, `bin\Debug\net8.0-windows\` **no** contiene
+  `RevitAPI.dll`/`RevitAPIUI.dll`, solo el DLL propio del addin. La lectura (a) fijada por el
+  usuario en §9 se sostiene para este paquete concreto: ya no es inferencia, es observación directa.
+- **§13.2 (¿compila de verdad sin Revit?) — confirmado por CI, no por esta máquina.** Workflow de
+  GitHub Actions en un runner `windows-latest` sin Revit instalado, en verde: `dotnet build` Debug y
+  Release limpios, `dotnet test` 3/3. Evidencia:
+  https://github.com/Ashromer/prompt-to-revit/actions/runs/32069521493. SC-001 y SC-004 cumplidos.
+- **SC-003 (expone `RevitAPI`/`RevitAPIUI`) — confirmado por inspección, no por el README.**
+  `dotnet list package` sobre el build NuGet resuelve `Nice3point.Revit.Api.RevitAPI [2026.4.10]` y
+  `Nice3point.Revit.Api.RevitAPIUI [2026.4.10]` como referencias directas.
+- **SC-002 (¿carga en Revit vivo y funciona igual que el build local?) — confirmado por el
+  usuario.** `GUION-VERIFICACION.md` completo: build NuGet solo y build Local solo, cada uno con
+  ribbon + tooltip + `TaskDialog` correctos; tabla de equivalencia con **veredicto: Equivalente**.
+  Hallazgo real pero no bloqueante durante la verificación: cargar los dos addins de PRUEBA a la vez
+  (no lo que pide Historia 2, que es cargar cada build por separado) produce un choque de nombre de
+  panel entre los dos `.addin` — texto de la excepción anotado por el usuario, documentado en la
+  nota de la sección 2 de `GUION-VERIFICACION.md` (`Captura.PNG` no captura ese diálogo: es de la
+  sesión posterior, con el build Local ya en solitario). No es el paquete NuGet fallando contra el
+  runtime: **no activa FR-009**.
+- **§13.3 (desajuste de update Revit vs. metadatos) — sin incidencia, y confirmado por observación.**
+  Ambos builds cargaron y funcionaron sin diálogo de error de carga de addin. Además, la barra de
+  título de `Captura.PNG` muestra **"Autodesk Revit 2026.4"**: la máquina del usuario está en la
+  update 4, la misma que los metadatos `2026.4.10`. Sigue abierto para el proyecto final (superficie
+  de API más amplia que la de este addin trivial).
+
+**Conclusión: los cinco success criteria de `requirements.md` (SC-001 a SC-005) quedan cumplidos.
+FR-009 no se activa en ningún punto. ADR-008 queda confirmado con la salvedad de licencia de §12,
+no bloqueante.** Veredicto completo y decisión formal sobre ADR-008: `VEREDICTO.md`.

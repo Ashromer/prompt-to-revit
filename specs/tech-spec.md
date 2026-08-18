@@ -4,7 +4,7 @@
 > | **Status** | 🟡 Draft |
 > | **Owner** | Usuario único, arquitecto y desarrollador de plugins de Revit |
 > | **Created** | 2026-08-17 |
-> | **Updated** | 2026-08-17 |
+> | **Updated** | 2026-08-18 |
 > | **Version** | v0.1 |
 > | **ProductSpec** | [[product-spec]] |
 
@@ -26,14 +26,16 @@ Fuera del alcance de este documento: el empaquetado e instalador, el soporte de 
 | Host | Autodesk Revit | 2026, interfaz en inglés | Único target soportado |
 | Protocolo con Claude | `ModelContextProtocol` (SDK oficial de MCP para .NET) | 2.2.0 | Resuelve el JSON-RPC sobre stdio, el handshake y la declaración de herramientas con esquema tipado. Confirmado por PoC #1, ver ADR-001 |
 | Compilación dinámica | `Microsoft.CodeAnalysis.CSharp` | *TBD* | Roslyn directo, sin envoltorio. Control explícito del juego de referencias, del `Emit` sin ejecutar y del `AssemblyLoadContext` colectible. Ver ADR-003 |
-| Referencias de la API | Paquetes NuGet de metadatos de la API de Revit | *TBD*, nombre exacto por confirmar | `RevitAPI.dll` no es redistribuible. Referencias de solo metadatos permiten compilar y hacer CI sin Revit instalado. Ver ADR-008 |
+| Referencias de la API | `Nice3point.Revit.Api.RevitAPI` + `Nice3point.Revit.Api.RevitAPIUI` | `2026.4.10`, fija (`Version="[2026.4.10]"`, sin rango flotante) | `RevitAPI.dll` no es redistribuible. Referencia de solo compilación (`ref/` sin `lib/`): compila y hace CI sin Revit instalado. Confirmado por PoC #2, ver ADR-008 |
 | Transporte entre procesos | `System.IO.Pipes`, named pipes | incluido en .NET 8 | Sin puerto abierto, sin token, ACL de usuario del sistema. Ver ADR-002 |
 | UI de aprobación | WPF | incluida en `net8.0-windows` | Ventana modeless dentro del proceso de Revit |
 | Serialización | `System.Text.Json` | incluido en .NET 8 | Contrato de mensajes y registro JSONL. Sin dependencia externa |
 | Testing | xUnit | *TBD* | Capa sin Revit, ver Testing Strategy |
 
-> [!tip] Dependencias directas de runtime
-> SDK de MCP para .NET, `Microsoft.CodeAnalysis.CSharp`, paquetes de metadatos de la API de Revit. Todo lo demás viene con .NET 8.
+> [!tip] Dependencias directas
+> SDK de MCP para .NET, `Microsoft.CodeAnalysis.CSharp`, y los dos paquetes de metadatos de la API de Revit (`Nice3point.Revit.Api.RevitAPI` y `Nice3point.Revit.Api.RevitAPIUI`). Todo lo demás viene con .NET 8.
+>
+> Matiz sobre los paquetes de la API: son dependencias de **compilación**, no de runtime. Van en `ref/` sin `lib/`, no aportan activo de runtime y no se copian a la carpeta de salida — verificado por observación en el PoC #2, no supuesto. En Revit, esos ensamblados los provee el propio proceso anfitrión.
 
 ## 🏗️ Module Design
 
@@ -279,7 +281,8 @@ Runtime:
 ModelContextProtocol                2.2.0
 Microsoft.Extensions.Hosting        8.0.0
 Microsoft.CodeAnalysis.CSharp       TBD
-Paquetes de metadatos API Revit     TBD, nombre exacto por confirmar, target 2026
+Nice3point.Revit.Api.RevitAPI       [2026.4.10]   solo compilación (ref/), no se copia a la salida
+Nice3point.Revit.Api.RevitAPIUI     [2026.4.10]   solo compilación (ref/), no se copia a la salida
 ```
 
 Dev:
@@ -290,8 +293,12 @@ xUnit                               TBD
 
 `ModelContextProtocol` y `Microsoft.Extensions.Hosting` quedan fijadas por el PoC #1 (ver
 `pocs/001-poc-1-sdk-oficial-de-mcp-para-net/DECISION-PELDANO.md` §4 y `VEREDICTO.md`); el `.csproj` de
-`RevitBridge.Mcp` debe fijar exactamente esas versiones, sin rango flotante. El resto no está fijado
-porque no existe todavía ningún `.csproj`: se rellenan al crear los manifiestos y nunca antes.
+`RevitBridge.Mcp` debe fijar exactamente esas versiones, sin rango flotante. Los dos paquetes de la API
+de Revit quedan fijados por el PoC #2 (ver `pocs/002-poc-2-paquete-nuget-metadatos-api-revit/RECONOCIMIENTO.md`
+§10 y `VEREDICTO.md`), con la **notación de corchetes obligatoria**: `Version="[2026.4.10]"` fija esa
+única versión, mientras que `Version="2026.4.10"` significa «≥» y puede resolver hacia arriba. Se rechaza
+el rango flotante `$(RevitVersion).*` que recomienda el README del propio paquete. El resto no está
+fijado porque no existe todavía ningún `.csproj`: se rellenan al crear los manifiestos y nunca antes.
 
 ## 📐 ADRs
 
@@ -398,17 +405,32 @@ Lo que decide es un riesgo específico de Revit: **todos los addins comparten Ap
 - (-) Semánticamente una ejecución fallida se reporta como llamada correcta
 - Mitigación: `ok` es el primer campo del contenido y su significado está en la descripción de la herramienta
 
-### ADR-008: Referencias de la API de Revit por paquete de metadatos
+### ADR-008: Referencias de la API de Revit por paquete de metadatos — CONFIRMADO por PoC #2
 
-**Decisión**: referenciar la API mediante paquetes NuGet de solo metadatos, no la DLL instalada en `C:\Program Files\Autodesk\Revit 2026\`.
+**Decisión**: referenciar la API mediante paquetes NuGet de solo metadatos, no la DLL instalada en `C:\Program Files\Autodesk\Revit 2026\`. Paquetes exactos: **`Nice3point.Revit.Api.RevitAPI`** y **`Nice3point.Revit.Api.RevitAPIUI`**, versión fija **`[2026.4.10]`**.
 
 **Context**: `RevitAPI.dll` no es redistribuible. Referenciarla por ruta local, que es lo que hacen los plugins existentes del autor, exige Revit instalado para compilar: hace imposible el CI y complica que un tercero compile el proyecto, que ahora es un objetivo.
 
+**Verificado por PoC #2** (`pocs/002-poc-2-paquete-nuget-metadatos-api-revit/VEREDICTO.md`, 2026-08-18):
+un addin trivial (`IExternalApplication` con botón de ribbon + `IExternalCommand`) compila limpio en
+Debug y Release en un runner `windows-latest` **sin Revit instalado**
+([run de CI 32069521493](https://github.com/Ashromer/prompt-to-revit/actions/runs/32069521493), SC-001 y
+SC-004), y el DLL resultante **carga en Revit 2026 vivo y su botón funciona de forma indistinguible** del
+mismo código compilado contra las DLL locales, confirmado y anotado por el usuario (SC-002,
+`GUION-VERIFICACION.md` §3, veredicto de equivalencia "Equivalente"). Los dos ensamblados mínimos quedan
+confirmados por inspección (`dotnet list package`) y por el hecho de que el código usa tipos de ambos
+(SC-003). Elección del paquete frente a las alternativas, en `RECONOCIMIENTO.md` §11: es el único
+candidato cuya línea 2026 sigue las updates del producto (6 versiones frente a una sola congelada en
+abril de 2025), el único con TFM `net8.0-windows7.0` y el único cuyo "solo compilación" es verificable en
+el código de empaquetado (`PackagePath="ref\$(TargetFramework)\"`) y no solo en la descripción.
+
 **Consequences**:
-- (+) Compila en cualquier máquina y en CI sin Revit instalado
+- (+) Compila en cualquier máquina y en CI sin Revit instalado — verificado, no supuesto
 - (+) La versión del target queda declarada en el manifiesto, no implícita en una ruta
-- (-) Dependencia de un paquete de terceros para una API de Autodesk
-- (-) Hay que confirmar que el paquete cubre 2026 y qué ensamblados expone
+- (-) Dependencia de un paquete de terceros para una API de Autodesk. **No hay alternativa oficial**: se verificó que Autodesk no publica la API de Revit en nuget.org (`RECONOCIMIENTO.md` §3.6). Bus factor de un mantenedor individual, mitigado por repo público con MIT y `.nupkg` inmutables con versión fijada
+- (-) ~~Hay que confirmar que el paquete cubre 2026 y qué ensamblados expone~~ Confirmado por PoC #2
+- (-) **Salvedad de licencia, asumida conscientemente**: el paquete es "solo metadatos" por *empaquetado* (`ref/` sin `lib/`, no se copia a la salida) pero **no** por contenido binario — el `.nupkg` lleva dentro la `RevitAPI.dll` original de Autodesk (35,1 MB) bajo MIT del empaquetador, sin permiso de redistribución acreditado. No bloquea nada hoy, pero **debe reevaluarse antes de declarar la distribución a terceros como objetivo con compromiso** (ver ADR-010). Detalle y fuentes: `RECONOCIMIENTO.md` §12
+- La salida sigue disponible y es barata: cambiar los dos `<PackageReference>` por `<Reference>` con `HintPath`, al coste de perder el CI de compilación y exigir Revit instalado a quien compile
 
 ### ADR-009: La aprobación caducada se rechaza automáticamente
 
@@ -456,7 +478,7 @@ Lo que decide es un riesgo específico de Revit: **todos los addins comparten Ap
 - [x] ~~¿Cómo se referencia una API no redistribuible?~~ → **Paquetes NuGet de metadatos**. Ver ADR-008
 - [x] ~~¿Qué pasa si la aprobación queda desatendida?~~ → **Rechazo automático al caducar**. Ver ADR-009
 - [x] ~~¿El SDK oficial de MCP para .NET está lo bastante maduro?~~ → **Sí. `ModelContextProtocol` 2.2.0, estable, stdio + esquema tipado confirmados.** Ver ADR-001 y `pocs/001-poc-1-sdk-oficial-de-mcp-para-net/VEREDICTO.md`
-- [ ] ¿Qué paquete de metadatos de la API de Revit se usa, en qué versión, y cubre 2026 completo? **Bloquea ADR-008** y el CI
+- [x] ~~¿Qué paquete de metadatos de la API de Revit se usa, en qué versión, y cubre 2026 completo?~~ → **`Nice3point.Revit.Api.RevitAPI` + `Nice3point.Revit.Api.RevitAPIUI`, versión fija `[2026.4.10]`, cubre 2026 hasta la update 4.** Compila sin Revit en CI y el DLL carga en Revit 2026 vivo igual que el compilado localmente. Ver ADR-008 y `pocs/002-poc-2-paquete-nuget-metadatos-api-revit/VEREDICTO.md`
 - [ ] ¿`/rollback` cubre también deshacer modificaciones de elementos preexistentes? Exige capturar el valor anterior de cada parámetro antes de escribirlo
 - [ ] ¿Cuál es el umbral concreto para que un snippet gradúe a comando? Repetición, estabilidad y coste son las señales; el corte está sin fijar
 - [ ] ¿Tamaño máximo de snippet y cota por defecto de iteraciones? Pendiente de calibrar con uso real

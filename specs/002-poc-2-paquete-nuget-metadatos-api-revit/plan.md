@@ -210,37 +210,72 @@ confirmación está mintiendo.
   criterio de equivalencia en tabla, edge case de carga con triaje NuGet/Local/ambos, limpieza).
   Rutas y literales (nombre de panel, texto de botón, tooltip, mensaje de diálogo) verificados
   contra los ficheros reales del Lote 2, no inventados. **Pendiente de ejecución por el usuario.**
-- [ ] @tester · Recoger y diagnosticar lo anotado por el usuario: una vez el usuario haya ejecutado el
+- [x] @tester · Recoger y diagnosticar lo anotado por el usuario: una vez el usuario haya ejecutado el
   guion, reportar qué quedó cumplido y qué no, citando la evidencia real anotada (no una inferencia).
   Si algo falló, distinguir si el problema es del paquete NuGet (compila pero el runtime no coincide),
   del `.addin` (registro/manifiesto), o de la propia acción del comando trivial, con la misma
   disciplina de triaje que usó el PoC #1 para separar fallo del SDK / fallo de registro / fallo del
   PoC.
+  **Resultado**: guion ejecutado y cerrado por el usuario. Sección 1 (build NuGet) OK en las cuatro
+  comprobaciones A1.1–A1.4; sección 2 (build Local en solitario) OK en las seis A2.1–A2.6, con
+  `Captura.PNG` como evidencia del ribbon; tabla de equivalencia §3 con las **siete filas coincidentes** y
+  veredicto anotado **"Equivalente"**; §6 (desregistro de ambos addins) hecha y confirmada vacía.
+  **SC-002 cumplido.** Un hallazgo real, diagnosticado y fuera de FR-009: al cargar los **dos** addins de
+  prueba a la vez, el segundo `OnStartup` revienta con `ArgumentException: The panel with name PoC #2
+  NuGet vs Local already exists!`. Triaje: no es del paquete NuGet (es simétrico, lo sufre el segundo en
+  cargar sea cual sea el build) ni del `.addin` (GUID y `AssemblyName` distintos, ambos cargan por
+  separado sin error); es del propio PoC — los dos builds comparten `Shared/PocRevitAddin.cs` y por tanto
+  el mismo nombre de panel, que en Revit es un recurso global de la sesión. Refuta la hipótesis que
+  `@revit-developer` dejó anotada en el Lote 2 ("debería dar dos paneles separados, uno por ensamblado").
+  El edge case de `requirements.md` (desajuste metadatos ↔ runtime) **no se manifestó**: §4 del guion
+  quedó sin activar.
 
 ---
 
 ## Lote 5 — Veredicto y cierre (depende de los Lotes 3 y 4)
 
-- [ ] @architect · Escribir el veredicto: documento
+- [x] @architect · Escribir el veredicto: documento
   `pocs/002-poc-2-paquete-nuget-metadatos-api-revit/VEREDICTO.md` con el resultado de cada criterio de
   éxito (SC-001 a SC-004 de `requirements.md`, y los cuatro Success criteria de la sección PoC #2 de
   `specs/roadmap.md`), la decisión sobre ADR-008 (confirmado, o revertido a referencia por ruta local
   por FR-009 con la consecuencia explícita de perder el CI de compilación), y si el veredicto es
   negativo, qué criterio concreto falló y con qué evidencia.
-- [ ] @architect · Actualizar el TechSpec: en `specs/tech-spec.md`, sustituir el `TBD` de la fila
+  **Resultado**: `VEREDICTO.md` escrito. **ADR-008 CONFIRMADO, FR-009 no se activa.**
+  `Nice3point.Revit.Api.RevitAPI` + `.RevitAPIUI` `[2026.4.10]`. SC-001 a SC-005 cumplidos, cada uno con
+  su evidencia citada y con la correspondencia explícita a los cuatro success criteria del roadmap (§2.2).
+  Se deja escrito por qué el build de esta máquina **no** prueba SC-001 (§2.1), el hallazgo del choque de
+  nombre de panel y por qué no es FR-009 (§3), la salvedad de licencia copiada de `RECONOCIMIENTO.md` §12
+  (§4), y el estado de los cinco riesgos abiertos de `RECONOCIMIENTO.md` §13 tras la verificación (§5).
+- [x] @architect · Actualizar el TechSpec: en `specs/tech-spec.md`, sustituir el `TBD` de la fila
   "Referencias de la API" del Tech Stack por el nombre e identificador exactos del paquete
   y su versión, añadirlo a la lista de dependencias directas de runtime, actualizar
   ADR-008 con el veredicto (confirmado tal cual, o revertido, con la consecuencia sobre el
   CI) y marcar como resuelto el ítem de Discovery ("¿Qué paquete de metadatos de la
   API de Revit se usa...?") con la decisión tomada (FR-007, FR-008).
-- [ ] @architect · Actualizar el roadmap: en `specs/roadmap.md`, marcar los cuatro success criteria de
+  **Resultado**: fila "Referencias de la API" del Tech Stack con los dos ids exactos y
+  `2026.4.10` fija; callout de dependencias directas actualizado, con el matiz de que son dependencias
+  de **compilación** y no de runtime (`ref/` sin `lib/`, verificado por observación); bloque Dependencies
+  con las dos líneas `[2026.4.10]` y la explicación de por qué la notación de corchetes es obligatoria;
+  ADR-008 retitulado "CONFIRMADO por PoC #2" con el párrafo de verificación, la justificación de la
+  elección frente a las alternativas y la salvedad de licencia como consecuencia explícita; Discovery del
+  paquete de metadatos tachado y cerrado. `Microsoft.CodeAnalysis.CSharp` y xUnit **se dejan en `TBD` a
+  propósito**: no los fija este PoC.
+- [x] @architect · Actualizar el roadmap: en `specs/roadmap.md`, marcar los cuatro success criteria de
   la sección "PoC #2" con su resultado, completar el "Output" con el nombre
   y la versión del paquete y el enlace al workflow de CI, y actualizar el "Gate Fase 0": marcar
   la línea del PoC #2 (cerrado / revertido a ruta local), completar la fila de Dependencies con
   `Microsoft.CodeAnalysis.CSharp` y el paquete de metadatos elegido, y cerrar el Discovery
   del paquete de metadatos. Si ambos PoCs quedan cerrados en positivo, dejar constancia explícita de
   que el Gate Fase 0 completo se cumple y Tier 0 puede arrancar.
-- [ ] @judge · Revisar el veredicto: comprobar que SC-002 (carga y funciona en Revit vivo) tiene
+  **Resultado**: cabecera de la sección PoC #2 marcada "✅ CERRADO, ADR-008 confirmado"; los cuatro
+  success criteria en ✅ con el mapeo a SC-001…SC-004 y su evidencia; "Closing decision" y "Output"
+  completos (paquetes, versión fija, `.github/workflows/poc2-build.yml` y enlace al run 32069521493).
+  Gate Fase 0: línea del PoC #2 marcada `[x]` con su evidencia, y estado del gate cambiado a
+  **✅ CUMPLIDO — los 2 PoCs cerrados en positivo, Tier 0 puede arrancar por F0.1**.
+  `Microsoft.CodeAnalysis.CSharp` se deja explícitamente en `TBD` (no lo fija ningún PoC; se fija al
+  crear el `.csproj` de F1.2) y se anota que eso no bloquea el gate. Discovery del paquete de metadatos
+  marcado como cerrado.
+- [x] @judge · Revisar el veredicto: comprobar que SC-002 (carga y funciona en Revit vivo) tiene
   evidencia real anotada por el usuario y no una inferencia del agente, que SC-001/SC-003/SC-004
   (compilación sin Revit y ensamblados expuestos) se apoyan en el run de CI y no en el build de la
   máquina de desarrollo (que tiene Revit instalado y no puede probar esto), que la elección del
@@ -248,3 +283,12 @@ confirmación está mintiendo.
   ciegas, y que las actualizaciones de `tech-spec.md` y `roadmap.md` son consistentes entre sí y con
   el veredicto. Igual que en el PoC #1, es el único punto de este PoC donde una revisión independiente
   se paga sola.
+  **Resultado**: primera pasada CHANGES_REQUESTED — dos bloqueantes: (1) `VEREDICTO.md`,
+  `GUION-VERIFICACION.md` y `RECONOCIMIENTO.md` citaban `Captura.PNG` como evidencia del diálogo de
+  error del choque de nombre de panel, pero la captura real es de un momento posterior (build Local
+  ya en solitario, sin error); (2) el rescope de `Microsoft.CodeAnalysis.CSharp` a F1.2 en
+  `roadmap.md` contradecía en silencio la redacción anterior del Gate Fase 0 sin dejar traza del
+  cambio. Ambos corregidos por el orquestador (cita de evidencia corregida en los tres ficheros;
+  rescope documentado con traza explícita y sometido a ratificación del usuario, que lo ratificó el
+  2026-08-18). Segunda pasada: **PASS**. Único residuo cosmético señalado (etiqueta `§13.3`
+  duplicada en `RECONOCIMIENTO.md`) corregido también.
