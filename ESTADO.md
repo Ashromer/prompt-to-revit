@@ -13,6 +13,10 @@ Se detectaron y corrigieron crasheos críticos del proceso host (Revit) debidos 
 1. Falta de captura de excepciones en hilos secundarios (`PipeServer`) y manejadores de API (`ExecutionQueueEventHandler`).
 2. Conflicto de carga de ensamblados por la versión de Roslyn (5.9.0 pedía `System.Collections.Immutable` v10, incompatible con Revit 2026 / .NET 8). Solucionado bajando la versión de `Microsoft.CodeAnalysis.CSharp` a la `4.8.0` y forzando la copia local de dependencias.
 
+**Tier 2: ✅ CUMPLIDO.**
+- **F2.1 y F2.2:** Invocación de catálogo funcional por reflexión e implementados comandos base de modelado y vistas.
+- **F2.4 y F2.5:** Previsualización implementada en borrados masivos, y protección automatizada mediante `DocumentChanged` que fuerza confirmación manual antes de modificar o borrar cualquier elemento que no haya sido creado durante la sesión actual (preexistentes).
+
 ## PoC #1 — SDK oficial de MCP para .NET
 
 Cerrado en sesiones anteriores. ADR-001 confirmado, `ModelContextProtocol` 2.2.0. Ver

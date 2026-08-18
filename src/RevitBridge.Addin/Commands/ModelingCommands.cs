@@ -1,0 +1,117 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using Autodesk.Revit.DB;
+using RevitBridge.Utils;
+
+namespace RevitBridge.Addin.Commands;
+
+/// <summary>
+/// Comandos robustos de pre-compilado para la gestión de modelado y metadatos (Tier 2).
+/// Todas las modificaciones manejan su propia transacción.
+/// </summary>
+public static class ModelingCommands
+{
+    [ComandoRevit("CrearMuroRecto")]
+    public static object CrearMuroRecto(Document doc, int nivelId, double p1x, double p1y, double p2x, double p2y, int tipoMuroId = 0)
+    {
+        var levelId = new ElementId(nivelId);
+        var wallTypeId = tipoMuroId > 0 ? new ElementId(tipoMuroId) : ElementId.InvalidElementId;
+        
+        // Conversión implícita de asunción (metros a pies decimales), ya que la IA suele dar metros
+        double m2ft = 1.0 / 0.3048;
+        Line geomLine = Line.CreateBound(new XYZ(p1x * m2ft, p1y * m2ft, 0), new XYZ(p2x * m2ft, p2y * m2ft, 0));
+
+        Wall? wall = null;
+        using (var tx = new Transaction(doc, "Crear Muro MCP"))
+        {
+            tx.Start();
+            // Si el wallType no se especifica (InvalidElementId), Revit usa el por defecto
+            wall = Wall.Create(doc, geomLine, levelId, false);
+            if (tipoMuroId > 0)
+            {
+                wall.ChangeTypeId(wallTypeId);
+            }
+            tx.Commit();
+        }
+
+        return new { Id = wall.Id.Value, Tipo = wall.WallType.Name, Longitud = geomLine.Length };
+    }
+
+    [ComandoRevit("ModificarParametro")]
+    public static object ModificarParametro(Document doc, int elementoId, string parametroNombre, string valor)
+    {
+        var elem = doc.GetElement(new ElementId(elementoId));
+        if (elem == null) throw new ArgumentException("Elemento no encontrado");
+
+        Parameter? param = elem.LookupParameter(parametroNombre);
+        if (param == null) throw new ArgumentException($"El parámetro '{parametroNombre}' no existe en este elemento.");
+        if (param.IsReadOnly) throw new InvalidOperationException($"El parámetro '{parametroNombre}' es de solo lectura.");
+
+        // F2.5 Protección de elementos preexistentes
+        if (!App.ElementosCreadosEnSesion.Contains(elementoId))
+        {
+            var approval = new RevitBridge.Addin.UI.ApprovalService();
+            if (!approval.SolicitarAprobacion($"ATENCIÓN: Vas a modificar el parámetro '{parametroNombre}' de un elemento preexistente (ID {elementoId}). ¿Aprobar?"))
+                throw new InvalidOperationException("Modificación de elemento preexistente cancelada por el usuario.");
+        }
+
+        using (var tx = new Transaction(doc, "Modificar Parámetro MCP"))
+        {
+            tx.Start();
+            switch (param.StorageType)
+            {
+                case StorageType.String:
+                    param.Set(valor);
+                    break;
+                case StorageType.Integer:
+                    if (int.TryParse(valor, out int iVal)) param.Set(iVal);
+                    else throw new ArgumentException("El valor no es un Integer válido.");
+                    break;
+                case StorageType.Double:
+                    if (double.TryParse(valor, out double dVal)) param.Set(dVal);
+                    else throw new ArgumentException("El valor no es un Double válido.");
+                    break;
+                case StorageType.ElementId:
+                    if (int.TryParse(valor, out int idVal)) param.Set(new ElementId(idVal));
+                    else throw new ArgumentException("El valor no es un ElementId válido.");
+                    break;
+            }
+            tx.Commit();
+        }
+
+        return new { Id = elem.Id.Value, Parametro = parametroNombre, NuevoValor = param.AsValueString() ?? valor };
+    }
+
+    [ComandoRevit("BorrarElementosMasivo")]
+    public static object BorrarElementosMasivo(Document doc, List<int> elementoIds)
+    {
+        var ids = elementoIds.Select(id => new ElementId(id)).ToList();
+        
+        // F2.4 Previsualización de borrado
+        var elems = ids.Select(id => doc.GetElement(id)).Where(e => e != null).ToList();
+        if (elems.Count > 0)
+        {
+            var categorias = elems.GroupBy(e => e.Category?.Name ?? "Desconocido").Select(g => $"{g.Count()} de {g.Key}");
+            var resumen = $"ATENCIÓN: Vas a borrar {elems.Count} elementos preexistentes:\n- " + string.Join("\n- ", categorias);
+            
+            var approval = new RevitBridge.Addin.UI.ApprovalService();
+            if (!approval.SolicitarAprobacion(resumen))
+                throw new InvalidOperationException("Borrado masivo cancelado por el usuario.");
+        }
+
+        var borradosConfirmados = new List<ElementId>();
+
+        using (var tx = new Transaction(doc, "Borrado Masivo MCP"))
+        {
+            tx.Start();
+            var deletedIds = doc.Delete(ids);
+            tx.Commit();
+            
+            if (deletedIds != null)
+                borradosConfirmados = deletedIds.ToList();
+        }
+
+        return new { ElementosSolicitados = ids.Count, ElementosBorrados = borradosConfirmados.Count };
+    }
+}

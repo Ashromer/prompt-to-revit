@@ -15,6 +15,7 @@ namespace RevitBridge.Addin;
 public sealed class App : IExternalApplication
 {
     public static System.Windows.Threading.Dispatcher RevitDispatcher { get; private set; } = null!;
+    public static System.Collections.Generic.HashSet<long> ElementosCreadosEnSesion { get; } = new();
 
     private ExecutionQueue? _cola;
     private ExternalEvent? _externalEvent;
@@ -25,8 +26,8 @@ public sealed class App : IExternalApplication
         try
         {
             RevitDispatcher = System.Windows.Threading.Dispatcher.CurrentDispatcher;
-            // Falla pronto si hay nombres de comando duplicados en el catálogo (ADR-005), en vez
-            // de descubrirlo la primera vez que alguien pida /commands.
+            application.ControlledApplication.DocumentChanged += OnDocumentChanged;
+
             CommandCatalog.Descubrir(typeof(ComandoRevitAttribute).Assembly);
 
             _cola = new ExecutionQueue();
@@ -52,8 +53,17 @@ public sealed class App : IExternalApplication
         }
     }
 
+    private void OnDocumentChanged(object? sender, Autodesk.Revit.DB.Events.DocumentChangedEventArgs e)
+    {
+        foreach (var id in e.GetAddedElementIds())
+        {
+            ElementosCreadosEnSesion.Add(id.Value);
+        }
+    }
+
     public Result OnShutdown(UIControlledApplication application)
     {
+        application.ControlledApplication.DocumentChanged -= OnDocumentChanged;
         _pipeServer?.Dispose();
         _externalEvent?.Dispose();
         return Result.Succeeded;
