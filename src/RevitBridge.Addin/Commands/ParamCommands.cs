@@ -23,6 +23,20 @@ public static class ParamCommands
             .WhereElementIsNotElementType()
             .ToList();
 
+        // F2.5 Protección de elementos preexistentes (§5.C.10/§5.D.15): modificar algo que no se
+        // creó en esta sesión exige aprobación manual siempre, sin excepción -- igual que
+        // ModelingCommands.ModificarParametro. Faltaba aquí (hallazgo de auditoría 2026-08-18):
+        // este comando modificaba parámetros de toda una categoría de elementos preexistentes
+        // sin pedir aprobación en ningún caso.
+        var preexistentes = collector.Where(e => !App.ElementosCreadosEnSesion.Contains(e.Id.Value)).ToList();
+        if (preexistentes.Count > 0)
+        {
+            var resumenAprobacion = $"ATENCIÓN: Vas a modificar el parámetro '{parametroNombre}' de {preexistentes.Count} elemento(s) preexistentes de la categoría '{categoriaBuiltIn}'. ¿Aprobar?";
+            var approval = new RevitBridge.Addin.UI.ApprovalService();
+            if (!approval.SolicitarAprobacion(resumenAprobacion))
+                throw new InvalidOperationException("Modificación masiva de elementos preexistentes cancelada por el usuario.");
+        }
+
         int afectados = 0;
         using (var tx = new Transaction(doc, $"Modificar parámetros {categoriaBuiltIn}"))
         {

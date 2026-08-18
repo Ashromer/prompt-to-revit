@@ -32,6 +32,121 @@ public class CompilerTests
     }
 
     [Fact]
+    public void SyntaxGuard_RejectsDocDelete_EvenWhenReceiverIsRenamed()
+    {
+        // Auditoría 2026-08-18: la versión anterior solo miraba si el texto del receptor era
+        // literalmente "doc" o "Document" -- renombrar la variable la esquivaba por completo.
+        var sourceCode = @"
+        public class MyMacro
+        {
+            public void Execute(object doc)
+            {
+                var d = doc;
+                d.Delete(123);
+            }
+        }";
+        var syntaxTree = CSharpSyntaxTree.ParseText(sourceCode);
+        var guard = new SyntaxGuard();
+
+        guard.Visit(syntaxTree.GetRoot());
+
+        Assert.NotEmpty(guard.Diagnostics);
+        Assert.Contains(guard.Diagnostics, d => d.Id == "RB001");
+    }
+
+    [Fact]
+    public void SyntaxGuard_RejectsSystemIOUsing()
+    {
+        var sourceCode = @"
+        using System.IO;
+        public class MyMacro
+        {
+            public void Execute() { }
+        }";
+        var syntaxTree = CSharpSyntaxTree.ParseText(sourceCode);
+        var guard = new SyntaxGuard();
+
+        guard.Visit(syntaxTree.GetRoot());
+
+        Assert.Contains(guard.Diagnostics, d => d.Id == "RB001");
+    }
+
+    [Fact]
+    public void SyntaxGuard_RejectsFullyQualifiedSystemIOCall()
+    {
+        var sourceCode = @"
+        public class MyMacro
+        {
+            public void Execute()
+            {
+                System.IO.File.Delete(""C:\\algo.txt"");
+            }
+        }";
+        var syntaxTree = CSharpSyntaxTree.ParseText(sourceCode);
+        var guard = new SyntaxGuard();
+
+        guard.Visit(syntaxTree.GetRoot());
+
+        Assert.Contains(guard.Diagnostics, d => d.Id == "RB001");
+    }
+
+    [Fact]
+    public void SyntaxGuard_RejectsSystemDiagnosticsProcessUsing()
+    {
+        var sourceCode = @"
+        using System.Diagnostics;
+        public class MyMacro
+        {
+            public void Execute() { }
+        }";
+        var syntaxTree = CSharpSyntaxTree.ParseText(sourceCode);
+        var guard = new SyntaxGuard();
+
+        guard.Visit(syntaxTree.GetRoot());
+
+        Assert.Contains(guard.Diagnostics, d => d.Id == "RB001");
+    }
+
+    [Fact]
+    public void SyntaxGuard_RejectsReflectionGetMethodInvokeBypass()
+    {
+        var sourceCode = @"
+        public class MyMacro
+        {
+            public void Execute(object doc)
+            {
+                var metodo = doc.GetType().GetMethod(""Delete"");
+                metodo.Invoke(doc, new object[] { 123 });
+            }
+        }";
+        var syntaxTree = CSharpSyntaxTree.ParseText(sourceCode);
+        var guard = new SyntaxGuard();
+
+        guard.Visit(syntaxTree.GetRoot());
+
+        Assert.Contains(guard.Diagnostics, d => d.Id == "RB001");
+    }
+
+    [Fact]
+    public void SyntaxGuard_RejectsEnvironmentExit()
+    {
+        var sourceCode = @"
+        public class MyMacro
+        {
+            public void Execute()
+            {
+                System.Environment.Exit(1);
+            }
+        }";
+        var syntaxTree = CSharpSyntaxTree.ParseText(sourceCode);
+        var guard = new SyntaxGuard();
+
+        guard.Visit(syntaxTree.GetRoot());
+
+        Assert.Contains(guard.Diagnostics, d => d.Id == "RB001");
+    }
+
+    [Fact]
     public void SyntaxGuard_ApprovesCleanCode()
     {
         // Arrange

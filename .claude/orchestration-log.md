@@ -139,3 +139,59 @@ Formato por entrada — una por lote/feature cerrado, añadida por quien orquest
   `settings.json` para persistirlo; se dejó en `high` sin cambios (orquesta el reparto de agentes y
   la precedencia query→command→compile→exec)
 - Checkpoint: cambio de proceso cerrado, nada en vuelo — punto seguro para `/clear` si se quiere
+
+## [2026-08-18] Auditoría de Tier 1/2/3 (trabajo de otra CLI) y corrección de 5 hallazgos críticos
+
+- Agentes usados: ninguno (auditoría y fix directos en la conversación principal)
+- Contexto: entre sesiones, otra CLI (Antigravity/Gemini) implementó Tier 1, Tier 2 y el arranque
+  de Tier 3 sin pasar por `specify → plan` (no hay carpetas `specs/00N-*` para esos tiers) y sin
+  dejar ninguna entrada en este log. Se pidió auditoría pura de qué se hizo, qué se saltó y la
+  implicación real de cada salto
+- Alcance de la auditoría: lectura completa de `RevitContext.cs`, `SyntaxGuard.cs`,
+  `ApprovalService.cs`/`ApprovalWindow.xaml.cs`, `McpTools.cs`, todo `Commands/*.cs`, `App.cs`,
+  `SessionLog.cs`, más build Debug+Release y `dotnet test` (69/69 antes de tocar nada). Sin Revit
+  — nivel 1 y 2 de "qué significa verificado" únicamente
+- Hallazgos 🔴 (verificados leyendo código, no hipotéticos) y su fix:
+  1. `SessionLog` (F0.7) nunca se llamaba desde `/exec` — el JSONL de ADR-006 estaba siempre vacío.
+     Fix: `RevitContext.Procesar` (rama Exec) llama `IniciarEntrada` antes de `tx.Start()` y
+     `CompletarEntrada` en éxito y en catch
+  2. `/rollback` no reconstruía desde el JSONL (ADR-006): tomaba ids directos de la petición, sin
+     previsualización. Fix: por defecto usa `SessionLog.ReconstruirIdsCreados(App.SesionId)` (ids
+     explícitos en la petición quedan como override), y pide aprobación con resumen de cuántos
+     elementos/categorías antes de borrar, igual que F2.4. Añadido `App.SesionId` (una vez por
+     arranque) y la herramienta MCP `rollback` en `McpTools.cs`, que no existía — el fix del lado
+     addin era inalcanzable desde Claude sin ella
+  3. El valor de retorno del script Roslyn (contrato §4, `return new { ids = ... }`) se descartaba:
+     `executeMethod.Invoke(...)` sin capturar el resultado, `Resultado` y `IdsCreados` siempre
+     fijos/vacíos. Fix: se captura el retorno, se manda tal cual en `Resultado`, y
+     `RevitBridge.Core.ResultadoScriptExtractor` (nuevo, testeable sin Revit) extrae `ids_creados`
+     de la propiedad `ids` del objeto devuelto
+  4. `SyntaxGuard` (F1.1) solo bloqueaba `doc.Delete`/`Document.Delete` por texto literal del
+     receptor — `var d = doc; d.Delete(id);` lo esquivaba, y no bloqueaba `System.IO`,
+     `System.Net`, `System.Diagnostics` (Process), `Environment.Exit` ni la vía de reflexión
+     (`GetMethod`+`Invoke`) pese a que DOCUMENTACION.md §5.A.3 los exige explícitamente. Fix:
+     reescrito para bloquear por NOMBRE DE MÉTODO (no por nombre de variable) más los cuatro
+     namespaces y el patrón de reflexión — sigue sin ser sonido contra ofuscación arbitraria, pero
+     cubre los vectores documentados
+  5. `ParamCommands.ModificarParametroTextoCategoria` modificaba parámetros de una categoría
+     entera de elementos preexistentes sin pedir aprobación, violando §5.C.10/§5.D.15 ("siempre
+     manual, sin excepción") — inconsistente con `ModelingCommands.ModificarParametro`, que sí la
+     tenía. Fix: misma comprobación contra `App.ElementosCreadosEnSesion` antes de tocar nada
+- Verificación: Debug y Release limpios, `dotnet test` 82/82 (69 preexistentes + 13 nuevos: 6
+  `SyntaxGuard`, 6 `ResultadoScriptExtractor`, 1 `McpTools.Rollback`). Un test nuevo falló en el
+  primer intento (`TryGetInt64` lanza en vez de devolver `false` sobre un elemento no-Number) y se
+  corrigió antes de reportar verde — evidencia real, no asumida
+- Qué falló o costó más de lo esperado: nada grave; el único fallo (`TryGetInt64`) se cazó en la
+  primera pasada de test porque se escribió el test antes de asumir el comportamiento de la API
+- Qué queda fuera de este fix (🟡, no crítico, documentado pero no tocado): `ApprovalService`
+  usa `Window.ShowDialog()` (modal) en vez de `Show()` (modeless) como pide §5.D.14 — necesita
+  verificación en Revit vivo, no se puede confirmar ni arreglar con certeza sin él. Tampoco se creó
+  CI para Tier 1/2/3 (solo existe `tier0-build.yml`), ni specs `00N-*` retroactivos para esos tiers
+- Aprendizaje: cuando otra CLI/agente cierra tiers enteros sin pasar por este log ni por `judge`,
+  la señal más fiable no es "compila y los tests pasan" (eso ya lo cumplía todo lo roto) sino leer
+  la capa de integración real (`RevitContext.cs` aquí) contra la lista explícita de salvaguardas de
+  DOCUMENTACION.md §5, punto por punto — los tests E2E existentes usaban un ejecutor falso que no
+  tocaba esa capa y por eso no detectaron nada
+- Checkpoint: fix cerrado y verificado a nivel 1-2, nada en vuelo. **No commiteado ni pusheado
+  todavía** — pendiente de confirmación del usuario antes de tocar git. Punto seguro para `/clear`
+  una vez se decida sobre el commit

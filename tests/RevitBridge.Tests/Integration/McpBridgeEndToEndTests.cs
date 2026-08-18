@@ -71,6 +71,35 @@ public class McpBridgeEndToEndTests
     }
 
     [Fact]
+    public async Task Herramienta_Rollback_Llega_A_La_Cola_Y_Responde()
+    {
+        // Auditoría 2026-08-18: /rollback no tenía ninguna herramienta MCP que lo expusiera --
+        // el fix del lado del addin era inalcanzable desde Claude. Cubre solo la fontanería
+        // (McpTools -> PipeClient -> PipeServer -> cola), no la lógica real de ADR-006, que vive
+        // en RevitContext y no es testeable sin Revit (es la única capa sin red de seguridad).
+        var cola = new ExecutionQueue();
+        var pipeName = NombrePipeDeTest();
+        using var server = new PipeServer(pipeName, cola);
+        server.Iniciar();
+
+        cola.PeticionEncolada += () => Task.Run(() => cola.Procesar(ExecutionQueue.ProcesarPlaceholder));
+
+        var pipeClient = new PipeClient(pipeName);
+        var tools = new McpTools(pipeClient);
+
+        var jsonRespuesta = await tools.Rollback(null, CancellationToken.None);
+
+        Assert.NotNull(jsonRespuesta);
+        var res = JsonSerializer.Deserialize<RespuestaOperacion>(jsonRespuesta, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+        Assert.NotNull(res);
+        Assert.True(res.Ok);
+        Assert.Equal(Fase.Ok, res.Fase);
+
+        server.Detener();
+    }
+
+    [Fact]
     public async Task Herramienta_Query_Devuelve_Error_Controlado_Si_Falla_La_Ejecucion()
     {
         var cola = new ExecutionQueue();
