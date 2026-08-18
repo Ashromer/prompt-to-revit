@@ -38,6 +38,39 @@ public static class ModelingCommands
         return new { Id = wall.Id.Value, Tipo = wall.WallType.Name, Longitud = geomLine.Length };
     }
 
+    [ComandoRevit("CrearMurosMasivo")]
+    public static object CrearMurosMasivo(Document doc, int nivelId, string jsonCoordenadas)
+    {
+        // Vital para F3.2 (Modelado VLM): Recibe un JSON de 100 muros y los genera de golpe.
+        var levelId = new ElementId(nivelId);
+        double m2ft = 1.0 / 0.3048;
+        
+        // Estructura esperada: [{"p1x":0,"p1y":0,"p2x":5,"p2y":0}, ...]
+        var opciones = new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+        var listaMuros = System.Text.Json.JsonSerializer.Deserialize<List<Dictionary<string, double>>>(jsonCoordenadas, opciones);
+        
+        if (listaMuros == null || listaMuros.Count == 0) return new { Creados = 0 };
+
+        int creados = 0;
+        using (var tx = new Transaction(doc, $"Batch Crear {listaMuros.Count} Muros (VLM)"))
+        {
+            tx.Start();
+            foreach (var coords in listaMuros)
+            {
+                if (coords.TryGetValue("p1x", out double p1x) && coords.TryGetValue("p1y", out double p1y) &&
+                    coords.TryGetValue("p2x", out double p2x) && coords.TryGetValue("p2y", out double p2y))
+                {
+                    Line geomLine = Line.CreateBound(new XYZ(p1x * m2ft, p1y * m2ft, 0), new XYZ(p2x * m2ft, p2y * m2ft, 0));
+                    Wall.Create(doc, geomLine, levelId, false);
+                    creados++;
+                }
+            }
+            tx.Commit();
+        }
+
+        return new { ElementosCreados = creados };
+    }
+
     [ComandoRevit("ModificarParametro")]
     public static object ModificarParametro(Document doc, int elementoId, string parametroNombre, string valor)
     {
