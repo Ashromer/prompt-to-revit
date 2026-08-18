@@ -103,6 +103,22 @@ catálogo y que el instalador no sobrescribe:
 Ninguna duplica reglas: `DOCUMENTACION.md` y `revit_api_knowledge.md` siguen siendo las fuentes
 únicas, las skills son el procedimiento.
 
+## Skill externa vendorizada: `/diagram-design`
+
+`.claude/skills/diagram-design/` es una copia íntegra (no de autoría propia) de
+[cathrynlavery/diagram-design](https://github.com/cathrynlavery/diagram-design) (MIT; ver
+`LICENSE-UPSTREAM` y `THIRD_PARTY_LICENSES.md` dentro de la carpeta de la skill — bundlea iconos
+MIT/CC0 de Tabler Icons y Simple Icons). Genera diagramas editoriales autocontenidos en HTML+SVG
+(arquitectura, secuencia, máquinas de estado, ER, swimlane, timeline, Gantt, árboles, org charts,
+cuadrantes, radar...) sin dependencias externas ni JS — encaja con las restricciones del `Artifact`
+del propio Claude Code (self-contained, sin CDN).
+
+Es una capa de **presentación**, generada a partir de `DOCUMENTACION.md`/`specs/`/
+`revit_api_knowledge.md`, no una fuente de verdad nueva ni un sustituto de ellos. Útil para
+diagramas de secuencia del contrato del named pipe, máquinas de estado del flujo de aprobación
+(§5), o visualizar la salida de `ExportarGrafoTopologico` antes de escribir el C# que la procesa —
+no para documentación normativa, que sigue siendo texto versionable.
+
 ## Qué significa "verificado" aquí
 
 Ninguna tarea puede reportarse como funcionando por haber compilado. Tres niveles, y siempre hay
