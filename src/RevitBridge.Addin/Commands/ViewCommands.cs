@@ -226,4 +226,27 @@ public static class ViewCommands
 
         return new { Id = vista3D.Id.Value, Nombre = vista3D.Name };
     }
+
+    [ComandoRevit("AplicarPlantillaDeVista")]
+    public static object AplicarPlantillaDeVista(Document doc, int vistaId, int plantillaId)
+    {
+        // Cambio de un único parámetro (ViewTemplateId) sobre una vista -- mismo régimen que
+        // CambiarEscalaVista: modifica una vista, no el modelo, no lleva PreexistingElementGuard
+        // (ese guard es para geometría/parámetros del modelo, §5.C.10/§5.D.15, no vistas).
+        var vista = doc.GetElement(new ElementId(vistaId)) as View;
+        if (vista == null) throw new ArgumentException("Vista no encontrada.");
+
+        var plantilla = doc.GetElement(new ElementId(plantillaId)) as View;
+        if (plantilla == null || !plantilla.IsTemplate)
+            throw new ArgumentException("El id indicado no corresponde a una plantilla de vista (¿lo obtuviste de ObtenerVistas con incluirPlantillas=true?).");
+
+        using (var tx = new Transaction(doc, "Aplicar Plantilla de Vista MCP"))
+        {
+            tx.Start();
+            vista.ViewTemplateId = plantilla.Id;
+            tx.Commit();
+        }
+
+        return new { Id = vista.Id.Value, PlantillaAplicada = plantilla.Name };
+    }
 }

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
+using View = Autodesk.Revit.DB.View;
 using RevitBridge.Utils;
 
 namespace RevitBridge.Addin.Commands;
@@ -149,5 +150,39 @@ public static class BaseCommands
         }
 
         return nombres;
+    }
+
+    [ComandoRevit("ObtenerNiveles")]
+    public static object ObtenerNiveles(Document doc)
+    {
+        // F3.7: casi todo comando de creación masiva pide un nivelId. ObtenerElementosDeCategoria
+        // sirve para eso genéricamente pero solo devuelve Id+Nombre -- para elegir el nivel
+        // correcto hace falta la elevación, que la vista genérica no expone.
+        double ft2m = 0.3048;
+        var niveles = new FilteredElementCollector(doc)
+            .OfClass(typeof(Level))
+            .Cast<Level>()
+            .OrderBy(l => l.Elevation)
+            .Select(l => new { Id = l.Id.Value, Nombre = l.Name, ElevacionMetros = l.Elevation * ft2m })
+            .ToList();
+
+        return niveles;
+    }
+
+    [ComandoRevit("ObtenerVistas")]
+    public static object ObtenerVistas(Document doc, bool incluirPlantillas = false)
+    {
+        // F3.7: para CrearVistaSeccion/CrearTextoEnVista/ColocarVistaEnPlano/AplicarPlantillaDeVista
+        // hace falta un vistaId real -- misma razón que ObtenerNiveles. Las plantillas de vista
+        // (ViewTemplate) también son View pero no son "una vista" en el sentido de mostrar el
+        // modelo, así que se excluyen por defecto.
+        var vistas = new FilteredElementCollector(doc)
+            .OfClass(typeof(View))
+            .Cast<View>()
+            .Where(v => incluirPlantillas || !v.IsTemplate)
+            .Select(v => new { Id = v.Id.Value, Nombre = v.Name, TipoVista = v.ViewType.ToString(), EsPlantilla = v.IsTemplate })
+            .ToList();
+
+        return vistas;
     }
 }
