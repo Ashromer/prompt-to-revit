@@ -18,7 +18,16 @@ namespace RevitBridge.Mcp.Tools;
 [McpServerToolType]
 public sealed class CadIngestTools
 {
-    private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
+    // CamelCase: los comandos del catálogo (CrearMuroRecto/CrearMurosMasivo) leen sus argumentos
+    // como Dictionary<string,double> con claves en minúscula (p1x/p1y/p2x/p2y) -- la comparación
+    // de claves de un diccionario es sensible a mayúsculas y PropertyNameCaseInsensitive no la
+    // afecta, solo el binding a propiedades de un POCO. Sin esta política, SegmentoRecto (P1x/P1y/
+    // P2x/P2y en C#) se serializaba en PascalCase y CrearMurosMasivo no encontraba ninguna clave.
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        WriteIndented = true,
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+    };
 
     [McpServerTool(Name = "cad_list_layers", Title = "Listar capas de un fichero CAD")]
     [Description("Abre un fichero DXF o DWG local y resume sus capas (nombre, nº de lineas/polilineas/inserts). Primer paso antes de mapear que capa es que cosa (muros, puertas...) -- ese mapeo lo confirma el usuario en la conversacion, esta herramienta no lo adivina.")]

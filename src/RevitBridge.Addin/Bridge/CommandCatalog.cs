@@ -11,8 +11,23 @@ namespace RevitBridge.Addin.Bridge;
 /// </summary>
 public static class CommandCatalog
 {
+    /// <summary>
+    /// Ensamblados donde puede vivir un comando del catálogo: RevitBridge.Utils (comandos de
+    /// ejemplo) y RevitBridge.Addin (donde vive prácticamente todo el catálogo real). Usado por
+    /// el arranque (App.cs), /commands y /command para que los tres vean siempre el mismo conjunto.
+    /// </summary>
+    public static IReadOnlyList<Assembly> EnsambladosDelCatalogo { get; } = new[]
+    {
+        typeof(ComandoRevitAttribute).Assembly,
+        typeof(CommandCatalog).Assembly,
+    };
+
     /// <summary>Escanea todos los tipos de un ensamblado (uso en producción: RevitBridge.Utils).</summary>
     public static IReadOnlyList<CommandDescriptor> Descubrir(Assembly ensamblado) => Descubrir(ensamblado.GetTypes());
+
+    /// <summary>Escanea todos los tipos de varios ensamblados (uso en producción: <see cref="EnsambladosDelCatalogo"/>).</summary>
+    public static IReadOnlyList<CommandDescriptor> Descubrir(IEnumerable<Assembly> ensamblados) =>
+        Descubrir(ensamblados.SelectMany(a => a.GetTypes()));
 
     /// <summary>
     /// Escanea un conjunto explícito de tipos. Permite testear la duplicidad de nombres sin

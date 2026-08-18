@@ -52,6 +52,22 @@ public class CommandCatalogTests
         Assert.Contains("duplicado-de-test", ex.Message);
     }
 
+    // Regresión (revisión judge 2026-08-18): /commands solo escaneaba RevitBridge.Utils y dejaba
+    // fuera prácticamente todo el catálogo real, que vive en RevitBridge.Addin -- Claude no podía
+    // descubrir CrearMurosMasivo/CrearAberturasMasivo/etc. aunque sí podía invocarlos por nombre.
+    [Fact]
+    public void EnsambladosDelCatalogo_Incluye_El_Ensamblado_Addin_Donde_Vive_El_Catalogo_Real()
+    {
+        // App.cs (arranque), RevitContext.cs (/commands) y RevitContext.cs (/command) usan los
+        // TRES la misma propiedad -- por construcción no pueden volver a divergir en qué
+        // ensamblados escanean. No se prueba Descubrir(EnsambladosDelCatalogo) end-to-end aquí:
+        // RevitBridge.Addin implementa IExternalCommand/IExternalApplication/IExternalEventHandler
+        // de RevitAPI/RevitAPIUI, así que Assembly.GetTypes() sobre él requiere esos DLLs cargados
+        // -- solo ocurre dentro del proceso de Revit. Es verificación de nivel 3 (CLAUDE.md), no
+        // reproducible en este test outside Revit.
+        Assert.Contains(typeof(RevitBridge.Addin.RevitContext).Assembly, CommandCatalog.EnsambladosDelCatalogo);
+    }
+
     public static class ComandoUnico
     {
         [ComandoRevit("comando-unico-de-test")]

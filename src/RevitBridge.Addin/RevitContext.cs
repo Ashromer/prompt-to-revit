@@ -117,7 +117,7 @@ public sealed class RevitContext : IRevitQueryContext
         else if (peticion.Operacion == Operaciones.Commands)
         {
             // F0.9 (Catálogo)
-            var catalogo = Bridge.CommandCatalog.Descubrir(typeof(Utils.ComandoRevitAttribute).Assembly);
+            var catalogo = Bridge.CommandCatalog.Descubrir(Bridge.CommandCatalog.EnsambladosDelCatalogo);
             return new RespuestaOperacion(
                 Ok: true,
                 Fase: Fase.Ok,
@@ -268,9 +268,7 @@ public sealed class RevitContext : IRevitQueryContext
             var req = peticion.Datos.Deserialize<CommandRequest>(new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
             if (req is null) throw new InvalidOperationException("El payload de CommandRequest es nulo.");
 
-            var assemblyUtils = typeof(Utils.ComandoRevitAttribute).Assembly;
-            var assemblyAddin = typeof(RevitContext).Assembly;
-            var metodos = new[] { assemblyUtils, assemblyAddin }
+            var metodos = Bridge.CommandCatalog.EnsambladosDelCatalogo
                 .SelectMany(a => a.GetTypes())
                 .SelectMany(t => t.GetMethods(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static))
                 .Where(m => m.GetCustomAttribute<Utils.ComandoRevitAttribute>()?.Nombre.Equals(req.Nombre, StringComparison.OrdinalIgnoreCase) == true)

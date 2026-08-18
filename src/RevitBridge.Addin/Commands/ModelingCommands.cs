@@ -82,14 +82,21 @@ public static class ModelingCommands
 
         int creados = 0;
         var idsCreados = new List<long>();
+        var errores = new List<string>();
         using (var tx = new Transaction(doc, $"Batch Crear {listaMuros.Count} Muros (VLM)"))
         {
             tx.Start();
             foreach (var coords in listaMuros)
             {
-                if (coords.TryGetValue("p1x", out double p1x) && coords.TryGetValue("p1y", out double p1y) &&
-                    coords.TryGetValue("p2x", out double p2x) && coords.TryGetValue("p2y", out double p2y))
+                try
                 {
+                    if (!coords.TryGetValue("p1x", out double p1x) || !coords.TryGetValue("p1y", out double p1y) ||
+                        !coords.TryGetValue("p2x", out double p2x) || !coords.TryGetValue("p2y", out double p2y))
+                    {
+                        errores.Add("Entrada sin 'p1x'/'p1y'/'p2x'/'p2y', omitida.");
+                        continue;
+                    }
+
                     Line geomLine = Line.CreateBound(new XYZ(p1x * m2ft, p1y * m2ft, 0), new XYZ(p2x * m2ft, p2y * m2ft, 0));
                     var wall = Wall.Create(doc, geomLine, levelId, false);
 
@@ -110,11 +117,18 @@ public static class ModelingCommands
                     creados++;
                     idsCreados.Add(wall.Id.Value);
                 }
+                catch (Exception ex)
+                {
+                    // Un muro degenerado (puntos coincidentes de CAD/VLM, p. ej.) no debe abortar
+                    // el batch entero -- sin este catch, Line.CreateBound/Wall.Create lanzaba fuera
+                    // del using(tx) y el rollback implícito deshacía también los muros ya creados.
+                    errores.Add(ex.Message);
+                }
             }
             tx.Commit();
         }
 
-        return new { ElementosCreados = creados, Ids = idsCreados };
+        return new { ElementosCreados = creados, Ids = idsCreados, ErroresOmitidos = errores.Count, Errores = errores };
     }
 
     [ComandoRevit("CrearForjadosMasivo")]
@@ -168,39 +182,43 @@ public static class ModelingCommands
             {
                 if (poligono.Count < 3) continue;
 
-                var curveLoop = new CurveLoop();
-                for (int i = 0; i < poligono.Count; i++)
-                {
-                    var p1 = poligono[i];
-                    var p2 = poligono[(i + 1) % poligono.Count];
-
-                    if (p1.TryGetValue("x", out double x1) && p1.TryGetValue("y", out double y1) &&
-                        p2.TryGetValue("x", out double x2) && p2.TryGetValue("y", out double y2))
-                    {
-                        curveLoop.Append(Line.CreateBound(new XYZ(x1 * m2ft, y1 * m2ft, 0), new XYZ(x2 * m2ft, y2 * m2ft, 0)));
-                    }
-                }
-
-                // Polígono degenerado (puntos con claves x/y ausentes dejaron menos segmentos que
-                // vértices): saltar en vez de dejar que Floor.Create lance sobre un CurveLoop
-                // inválido y aborte el lote entero.
-                if (curveLoop.NumberOfCurves() < 3)
-                {
-                    errores.Add("Polígono con menos de 3 segmentos válidos, omitido.");
-                    continue;
-                }
-
                 try
                 {
+                    // Line.CreateBound también puede lanzar (vértices coincidentes/degenerados, p.
+                    // ej. de CAD o VLM) -- tiene que vivir DENTRO de este try, no antes: si lanza
+                    // fuera del try aborta el using(tx) entero y el rollback implícito deshace
+                    // también los forjados de iteraciones anteriores ya creados.
+                    var curveLoop = new CurveLoop();
+                    for (int i = 0; i < poligono.Count; i++)
+                    {
+                        var p1 = poligono[i];
+                        var p2 = poligono[(i + 1) % poligono.Count];
+
+                        if (p1.TryGetValue("x", out double x1) && p1.TryGetValue("y", out double y1) &&
+                            p2.TryGetValue("x", out double x2) && p2.TryGetValue("y", out double y2))
+                        {
+                            curveLoop.Append(Line.CreateBound(new XYZ(x1 * m2ft, y1 * m2ft, 0), new XYZ(x2 * m2ft, y2 * m2ft, 0)));
+                        }
+                    }
+
+                    // Polígono degenerado (puntos con claves x/y ausentes dejaron menos segmentos
+                    // que vértices): saltar en vez de dejar que Floor.Create lance sobre un
+                    // CurveLoop inválido.
+                    if (curveLoop.NumberOfCurves() < 3)
+                    {
+                        errores.Add("Polígono con menos de 3 segmentos válidos, omitido.");
+                        continue;
+                    }
+
                     var floor = Floor.Create(doc, new List<CurveLoop> { curveLoop }, floorTypeId, levelId);
                     creados++;
                     idsCreados.Add(floor.Id.Value);
                 }
                 catch (Exception ex)
                 {
-                    // Un polígono inválido (autointersección, no coplanar) no debe abortar el resto
-                    // del lote -- se agrega el error, no se lista uno por uno (revit_api_knowledge.md,
-                    // patrón de módulos estrechos).
+                    // Un polígono inválido (autointersección, no coplanar, vértices degenerados) no
+                    // debe abortar el resto del lote -- se agrega el error, no se lista uno por uno
+                    // (revit_api_knowledge.md, patrón de módulos estrechos).
                     errores.Add(ex.Message);
                 }
             }

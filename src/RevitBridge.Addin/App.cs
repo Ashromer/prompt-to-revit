@@ -35,7 +35,7 @@ public sealed class App : IExternalApplication
             RevitDispatcher = System.Windows.Threading.Dispatcher.CurrentDispatcher;
             application.ControlledApplication.DocumentChanged += OnDocumentChanged;
 
-            CommandCatalog.Descubrir(typeof(ComandoRevitAttribute).Assembly);
+            CommandCatalog.Descubrir(CommandCatalog.EnsambladosDelCatalogo);
 
             _cola = new ExecutionQueue();
             var handler = new ExecutionQueueEventHandler(_cola);
