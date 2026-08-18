@@ -25,6 +25,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\RevitBridge.Core\RevitBridge.Core.csproj" />
+    <ProjectReference Include="..\..\src\RevitBridge.CadIngest\RevitBridge.CadIngest.csproj" />
     <ProjectReference Include="..\..\src\RevitBridge.Mcp\RevitBridge.Mcp.csproj" />
     <ProjectReference Include="..\..\src\RevitBridge.Addin\RevitBridge.Addin.csproj" />
     <ProjectReference Include="..\..\src\RevitBridge.Utils\RevitBridge.Utils.csproj" />

@@ -75,14 +75,17 @@ Grafo de módulos y dependencias de compilación:
 flowchart TD
     Core["RevitBridge.Core<br/>net8.0<br/>contrato de mensajes, sin Revit"]
     Mcp["RevitBridge.Mcp<br/>net8.0<br/>servidor MCP y cliente de pipe"]
+    CadIngest["RevitBridge.CadIngest<br/>net8.0<br/>parsing DXF/DWG, sin Revit (ADR-012)"]
     Addin["RevitBridge.Addin<br/>net8.0-windows<br/>listener, Roslyn, ExternalEvent, WPF"]
     Utils["RevitBridge.Utils<br/>net8.0-windows<br/>utilidades y commandset"]
     Tests["RevitBridge.Tests<br/>xUnit"]
 
     Mcp --> Core
+    Mcp --> CadIngest
     Addin --> Core
     Addin --> Utils
     Tests --> Core
+    Tests --> CadIngest
     Tests --> Mcp
     Tests --> Addin
 ```
@@ -124,6 +127,10 @@ Implementa contra la API de Revit las interfaces declaradas en `Core`, concentra
 #### `src/RevitBridge.Addin/UI/ApprovalWindow` — Revisión humana
 
 Muestra el snippet formateado y espera decisión, devolviendo rechazo automático si caduca el plazo sin intervención.
+
+#### `src/RevitBridge.CadIngest` — Ingesta CAD (ADR-012)
+
+Lee DXF/DWG con `ACadSharp` (mismo modelo `CadDocument` para los dos formatos), resume capas, calibra escala por cabecera y extrae geometría de una capa a segmentos rectos en metros (teselando arcos por bisección de bulge, ≤12° de barrido por defecto), en el mismo esquema JSON que ya aceptan `CrearMuroRecto`/`CrearMurosMasivo`. Sin Revit ni Windows — vive en el proceso del puente, no en el addin, por el mismo principio de superficie mínima de dependencia que ADR-003. Envuelto por herramientas MCP (`RevitBridge.Mcp/Tools/CadIngestTools.cs`) que no pasan por el named pipe: operan sobre un fichero local dentro del propio proceso del puente.
 
 #### `src/RevitBridge.Utils` — Utilidades y commandset
 
@@ -283,6 +290,7 @@ Microsoft.Extensions.Hosting        8.0.0
 Microsoft.CodeAnalysis.CSharp       TBD
 Nice3point.Revit.Api.RevitAPI       [2026.4.10]   solo compilación (ref/), no se copia a la salida
 Nice3point.Revit.Api.RevitAPIUI     [2026.4.10]   solo compilación (ref/), no se copia a la salida
+ACadSharp                           [3.0.0]        MIT, DXF y DWG con la misma API. Ver ADR-012
 ```
 
 Dev:

@@ -12,6 +12,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\RevitBridge.Core\RevitBridge.Core.csproj" />
+    <ProjectReference Include="..\RevitBridge.CadIngest\RevitBridge.CadIngest.csproj" />
   </ItemGroup>
 
   <ItemGroup>
