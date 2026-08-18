@@ -206,12 +206,15 @@ Una vez completado el puente seguro (Tier 1) y el catálogo precompilado con sal
 
 | Feature | Descripción | Dependencias | Notas |
 | :--- | :--- | :--- | :--- |
-| F3.1 | **Contexto Denso (Knowledge Base RAG):** Al abrir la sesión, se compila o inyecta el grafo topológico, metodologías y estándares BIM en una BD vectorial o System Prompt masivo. Inicialización lenta, ejecución "Zero-Shot" instantánea y sin alucinaciones normativas. | F2.1 | Responde a la necesidad de no descubrir metodologías en tiempo real. |
-| F3.2 | **Modelado VLM (Visual Language Models):** Desarrollo de un flujo donde el cliente MCP recibe un croquis/imagen (planta/axonometría), infiere el grafo espacial y deduce las coordenadas para lanzar ráfagas deterministas a `CrearMuroRecto` por el Pipe. | F2.1, F2.2 | Requiere integración multimodal (Claude 3.5 Sonnet / GPT-4o) en la terminal de inicio. |
+| F3.1 | **Contexto Denso (Knowledge Base RAG):** Al abrir la sesión, se compila o inyecta el grafo topológico, metodologías y estándares BIM en una BD vectorial o System Prompt masivo. Inicialización lenta, ejecución "Zero-Shot" instantánea y sin alucinaciones normativas. | F2.1 | **Diseño cerrado, ADR-011.** Sin BD vectorial en v1: dato dinámico por `/command` existente, dato estático como corpus curado a mano. |
+| F3.2a | **Modelado desde CAD (DXF/DWG):** parsing determinista de un fichero CAD → grafo de muros/forjados/aberturas → ráfagas deterministas a `CrearMurosMasivo`/`CrearForjadosMasivo`/`CrearAberturasMasivo` por el Pipe. | F2.1, F2.2 | **Diseño cerrado, ADR-012.** `ACadSharp` (DXF y DWG), proyecto nuevo `RevitBridge.CadIngest`. Antes "F3.2"; dividida porque CAD e imagen son pipelines distintos, no una sola feature |
+| F3.2b | **Modelado desde PDF/imagen (VLM):** el usuario adjunta un croquis/plano en la conversación, Claude lo interpreta con su propia visión y genera el mismo JSON que ya aceptan los comandos de creación masiva. | F2.1, F2.2 | **Diseño cerrado, ADR-013.** Sin integración multimodal externa — la redacción anterior ("requiere GPT-4o") queda obsoleta |
 | F3.3 | **Auditoría Automática Normativa (CTE / QA Agent):** Agente especializado en *Code Compliance*. Revisa planos de accesibilidad o evacuación cruzando el CTE (Código Técnico) con las propiedades del modelo para validar el diseño (ej. "las viviendas A y B cumplen"). | F2.2, F3.1 | Ahorro masivo de horas de justificación de proyectos. |
-| F3.4 | **Generación Paramétrica Híbrida:** El LLM en lugar de modelar, propone inputs a un generador C# de Grasshopper/Revit que calcula 1000 iteraciones (optimización de vistas/áreas) y escupe la óptima. | F2.1 | Une deducción LLM con cómputo bruto C#. |
-| F3.5 | **Intent-Based Operations:** Traducción de directrices vagas ("Borra las líneas rojas en los planos de planta") a cadenas de ejecución lógicas (Query Planos -> Query Líneas Rojas -> Intersección -> Borrado Seguro F2.4). | F2.2 | Transforma al LLM de un "autómata" a un "delegado" con razonamiento BIM. |
+| F3.4 | **Generación Paramétrica Híbrida:** El LLM en lugar de modelar, propone inputs a un generador C# de Grasshopper/Revit que calcula 1000 iteraciones (optimización de vistas/áreas) y escupe la óptima. | F2.1 | Une deducción LLM con cómputo bruto C#. **Scope creep sin confirmar** — Grasshopper no aparece en ningún otro sitio del proyecto. |
+| F3.5 | **Intent-Based Operations:** Traducción de directrices vagas ("Borra las líneas rojas en los planos de planta") a cadenas de ejecución lógicas (Query Planos -> Query Líneas Rojas -> Intersección -> Borrado Seguro F2.4). | F2.2 | Transforma al LLM de un "autómata" a un "delegado" con razonamiento BIM. No es código de addin — disciplina de skill (`/revit-bridge`). |
 | F3.6 | **RAG Knowledge Base & Cristalización Python:** Absorción del Vector Store documental (Revit 2025 API) y destilación de cientos de scripts Python ("one-shot") en Comandos Maestros C# (Tier 2/3), eliminando dependencias de IronPython y errores de tipado. | F3.1 | Cierra la brecha entre el conocimiento abierto (scripts) y la seguridad de ejecución E2E. |
+| F3.7 | **Catálogo de "casa completa":** puertas/ventanas (`CrearAberturasMasivo`), tabiques (parámetro `tipoMuroId` en `CrearMurosMasivo` + `BuscarTiposDeMuroPorFuncion`), mobiliario (`ColocarMobiliarioMasivo`), tejado (`CrearTejadoExtrusion`, `CrearTejadoPorHuella`). | F2.1 | Backlog detallado con enfoque de API por comando más abajo. Beneficia a F3.2a y F3.2b por igual — ambas convergen en el mismo catálogo |
+| F3.8 | **Previsualización y aprobación de creación masiva:** umbral por tamaño, resumen combinado para una importación completa (`ImportarPlantaDesdeCad`), `TransactionGroup` único. | F3.2a, F3.7 | Base ya implementada (2026-08-18: `CrearMurosMasivo`/`CrearForjadosMasivo` piden aprobación siempre, sin umbral todavía) — el orquestador combinado queda pendiente |
 
 **Criterio de cierre de Tier 3** — Un flujo E2E donde el usuario sube un croquis JPG a su interfaz de chat, el VLM lo analiza normativamente contra la Knowledge Base pre-cargada, y lanza cientos de llamadas silenciosas al catálogo C#, generando el esqueleto del edificio completo en segundos.
 
@@ -226,21 +229,20 @@ Una vez completado el puente seguro (Tier 1) y el catálogo precompilado con sal
 > - **Verificado en Revit vivo** (única verificación de nivel 3 del proyecto hasta ahora, ver §9 de
 >   `DOCUMENTACION.md`): un script Roslyn vía `/exec` renombrando hojas con lógica arbitraria, y un
 >   disparo masivo de `/command` (niveles + forjados + muros) contra un modelo real.
-> - **Bugs conocidos de esa misma verificación**: `CrearMurosMasivo` genera muros solapados (falta
->   `Top Constraint`/`Top Offset`); `CrearForjadosMasivo` no genera geometría en el lienzo
->   (`CurveLoop` inválido o `FloorType` no resuelto). Detalle en `DOCUMENTACION.md` §9.
-> - **F3.1 tiene diseño resuelto** (borrador de ADR-011 vía sesión de `architect`, pendiente de
->   aprobación del usuario antes de aplicarlo a `specs/tech-spec.md`): sin BD vectorial en v1, dato
->   dinámico ya cubierto por `/command` existente, dato estático (CTE/metodologías) como corpus
->   curado a mano.
+> - **Los dos bugs de esa misma verificación ya están corregidos** (2026-08-18, nivel 1-2, pendiente
+>   de confirmación en Revit vivo): `Top Constraint` en `CrearMurosMasivo`, `FloorType` por defecto
+>   en `CrearForjadosMasivo`. Detalle en `DOCUMENTACION.md` §9.
+> - **F3.1, F3.2a y F3.2b tienen diseño cerrado** — ADR-011, ADR-012, ADR-013 en `specs/tech-spec.md`.
+>   Pendiente de implementación, no de decisión.
 > - **F3.4 (Grasshopper) es scope creep** — no aparece en ningún otro sitio de `DOCUMENTACION.md`/
 >   `tech-spec.md`. Confirmar con el usuario antes de construir nada ahí.
 > - **F3.5 no es código de addin** — es disciplina de skill (`/revit-bridge`), no una feature C#
 >   con su propia rama.
-> - Antes de seguir: cerrar el diseño de F3.1 (aplicar o ajustar ADR-011), y cada feature restante
->   por su propia sesión de `architect` — no agrupar como se agrupó Tier 0, son decisiones de
->   diseño genuinamente distintas entre sí (dónde vive un vector store no es la misma decisión que
->   qué cliente multimodal usar para VLM).
+> - **2026-08-18, diseño de F3.1/F3.2a/F3.2b cerrado y aplicado** (ADR-011, ADR-012, ADR-013 en
+>   `specs/tech-spec.md`). Cada uno tuvo su propia sesión de `architect` — no se agruparon como
+>   Tier 0, eran decisiones genuinamente distintas (dónde vive un vector store no es la misma
+>   decisión que qué cliente multimodal usar para VLM ni que qué librería de parsing CAD). Pasan a
+>   implementación por el ciclo normal (`revit-developer`/`mcp-developer` + `judge`), ver F3.7/F3.8.
 > - **2026-08-18, base compartida corregida**: `CrearMurosMasivo` (Top Constraint) y
 >   `CrearForjadosMasivo` (FloorType por defecto) ya no son bugs conocidos a nivel 1-2, y ambos
 >   piden aprobación con previsualización antes de crear. Prerrequisito que las dos sesiones

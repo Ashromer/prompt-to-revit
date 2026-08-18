@@ -456,6 +456,46 @@ el código de empaquetado (`PackagePath="ref\$(TargetFramework)\"`) y no solo en
 - (-) [[product-spec]] declara la distribución fuera de alcance y necesita ajuste
 - (-) La salvaguarda principal, que el usuario lea el snippet antes de aprobarlo, asume un usuario que sabe C#. Distribuir a quien no sabe exigiría rediseñarla, y eso no está resuelto
 
+### ADR-011: F3.1 (Contexto Denso) sin BD vectorial en v1
+
+**Decisión**: F3.1 se resuelve como dos mecanismos separados según la naturaleza del dato, ninguno con base de datos vectorial en v1. El dato dinámico del documento abierto (grafo topológico, niveles, inventario por categoría) se cubre con `/command` ya existente (`ExportarContextoMasivo`, `ExportarGrafoTopologico`, `src/RevitBridge.Addin/Commands/ExtractionCommands.cs`). El dato estático (CTE, metodologías BIM) es un corpus curado a mano por el usuario, cargado como contexto — mismo patrón que `~/.claude/revit_knowledge/revit_api_knowledge.md`, que `DOCUMENTACION.md` §6 ya describe explícitamente como "no fine-tuning, corpus que se carga como contexto".
+
+**Context**: el roadmap dejaba la decisión abierta ("BD vectorial o System Prompt masivo"). Sesión de `architect` (2026-08-18): el dato dinámico no tiene nada que indexar, cambia cada sesión y ya es pequeño/estructurado. El dato estático sería candidato real a embeddings, pero el corpus todavía no existe — indexar una incógnita sin contenido es invertir en lo equivocado. Ruta de escalada evaluada y documentada, no descartada: embeddings locales vía ONNX (`SmartComponents.LocalEmbeddings`, Microsoft/MIT, sin llamada de red en tiempo de ejecución), nunca una API externa — eso sería la primera llamada de red saliente de todo el proyecto y merecería su propio ADR explícito.
+
+**Consequences**:
+- (+) Cero dependencias nuevas en v1; la mitad "datos del modelo" ya está construida
+- (+) No se introduce la primera llamada de red saliente del proyecto sin que sea una decisión explícita y propia
+- (-) La promesa de F3.1 para F3.3 (auditoría CTE) depende de que el usuario efectivamente escriba y mantenga el corpus
+- (-) Sin índice semántico, cargar un corpus grande completo como contexto puede ser caro en tokens si el corpus crece mucho; mitigado solo si el camino de escalada se activa como feature propia
+
+### ADR-012: Ingesta CAD (DXF/DWG) determinista con ACadSharp — mitad CAD de F3.2
+
+**Decisión**: nuevo proyecto `RevitBridge.CadIngest` (`net8.0`, sin Windows, sin Revit), dependiente de `ACadSharp` (NuGet, MIT), referenciado únicamente por `RevitBridge.Mcp`. Lee DXF **y** DWG con el mismo modelo en memoria (`CadDocument`). Mapeo de capas/bloques confirmado por conversación con perfil persistido por proyecto (`%APPDATA%\RevitBridge\cad-profiles\`), nunca heurística automática silenciosa. Escala calibrada por la cabecera del fichero, contrastada contra una cota conocida cuando exista; si discrepan o no hay ninguna referencia fiable, se bloquea y se pide confirmación explícita — nunca un valor asumido.
+
+**Context**: sesión de `architect` (2026-08-18) para la mitad CAD/DXF de F3.2. Invalida la premisa con la que se lanzó la sesión ("DXF barato con `netDxf` vs DWG caro con SDK propietario"): ACadSharp lee los dos formatos con la misma API, así que no hace falta pedir al usuario que exporte a DXF como requisito. Encontró, por lectura directa de código, un hueco real de catálogo: no existe ningún comando de colocación de puertas/ventanas, y `CrearMurosMasivo` solo acepta segmentos rectos (los arcos deben tesselarse antes de llegar). El parsing vive en el puente (`RevitBridge.Mcp`), no en el addin — mismo principio que ADR-003 (menos superficie de dependencia en el AppDomain compartido con otros addins de Revit).
+
+**Consequences**:
+- (+) Sin fricción de "exporta a DXF antes" como requisito de producto; una sola dependencia cubre los dos formatos
+- (+) Cero dependencia nueva en el proceso de Revit
+- (-) 823★/60 issues abiertas en ACadSharp: menos maduro que el resto de dependencias del proyecto; sin verificar contra un fichero DWG real hasta el spike no bloqueante (`pocs/003-spike-cad-ingest/`)
+- (-) Requiere código de catálogo nuevo real (`CrearAberturasMasivo`, `ImportarPlantaDesdeCad`), no es solo cablear lo ya existente
+- (-) Riesgos abiertos documentados en el borrador: XREFs no resueltos, bloques espejados en puertas/ventanas, coordenadas absolutas grandes de sistemas de topografía, niveles duplicados — ver plan de implementación
+- Prerrequisito duro (ya cerrado, 2026-08-18): los dos bugs de `CrearMurosMasivo`/`CrearForjadosMasivo` corregidos — ver `DOCUMENTACION.md` §9
+
+### ADR-013: F3.2 (mitad PDF/imagen) sin integración multimodal nueva
+
+**Decisión**: la interpretación visual de un plano en PDF/imagen ocurre en la conversación de Claude Code, que ya tiene visión nativa — sin ningún componente de software nuevo. Escala anclada por una cota de referencia legible en el plano, combinada con un muro de prueba individual (`CrearMuroRecto`) confirmado visualmente por el usuario antes de lanzar el lote completo. Previsualización y aprobación obligatoria en la creación masiva.
+
+**Context**: sesión de `architect` (2026-08-18) para la mitad PDF/imagen de F3.2. Invalida la redacción original de la fila F3.2 del roadmap ("requiere integración multimodal... GPT-4o en la terminal de inicio"): el "cliente MCP" de §2 de `DOCUMENTACION.md` es Claude Code, que ya interpreta imágenes en la propia conversación — construir una integración separada duplicaría una capacidad ya presente y reintroduciría la superficie de red saliente que ADR-002 retiró deliberadamente del proyecto. Encontró, por lectura directa de código y de forma independiente de la sesión paralela de CAD (convergencia no coordinada), el mismo hallazgo de seguridad: ni `CrearMurosMasivo` ni `CrearForjadosMasivo` llamaban a `ApprovalService` en ningún punto — no es un riesgo específico de VLM, es un defecto que ya existía.
+
+**Consequences**:
+- (+) Cero infraestructura nueva para la interpretación visual; el trabajo real es mucho menor que lo que sugería la redacción original del roadmap
+- (+) La salvaguarda de creación masiva beneficia a las dos vías (CAD y VLM) por igual
+- (-) El control de calidad depende de que el usuario lea de verdad el resumen de aprobación antes de confirmar, no lo apruebe mecánicamente — mismo punto débil que ya reconoce `DOCUMENTACION.md` §5.D para la revisión de snippets Roslyn
+- (-) Fiabilidad de la interpretación visual sin validar contra un plano real de baja fidelidad (escaneo/foto, no PDF vectorial) — PoC no bloqueante recomendado antes de dar la vía por operativa: ≥90% de elementos identificados sin inventar, topología de esquinas correcta, error dimensional <5-10% tras el anclaje
+
+**Nota de aplicación conjunta (ADR-012 + ADR-013, 2026-08-18)**: ambos borradores proponían un `RevitBridge.Core.CreationPreview` nuevo, hermano de `DeletionPreview`. En la práctica se generalizó `DeletionPreview.ConstruirResumen` (ya no asume "elemento(s) preexistentes" en la plantilla) y se reutilizó directamente — sin clase nueva — porque el patrón es idéntico y ya estaba escrito. `CrearMurosMasivo`/`CrearForjadosMasivo` ya llaman a `ApprovalService` con ese resumen antes de abrir la `Transaction`. El resto de cada ADR (ingesta CAD, flujo conversacional VLM, comandos de catálogo nuevos) sigue pendiente de implementación por su propio plan.
+
 ## ⚠️ Known Limitations
 
 - **No hay timeout real de ejecución.** Revit es monohilo: un bucle infinito lo congela y no se puede matar desde fuera sin perder el trabajo. Es el punto débil real del diseño. Se mitiga con cota obligatoria de iteraciones en el código generado, dry-run y revisión humana, no se resuelve. El timeout del transporte corta la espera del puente, no la ejecución.
@@ -483,3 +523,9 @@ el código de empaquetado (`PackagePath="ref\$(TargetFramework)\"`) y no solo en
 - [ ] ¿Cuál es el umbral concreto para que un snippet gradúe a comando? Repetición, estabilidad y coste son las señales; el corte está sin fijar
 - [ ] ¿Tamaño máximo de snippet y cota por defecto de iteraciones? Pendiente de calibrar con uso real
 - [ ] ¿Aguanta el `AssemblyLoadContext` colectible el volumen de una sesión larga, o hay que reciclar el proceso? Medible solo con uso real
+- [x] ~~¿F3.1 (Contexto Denso) con BD vectorial o System Prompt masivo?~~ → **Ninguna en v1**: dato dinámico por `/command` existente, dato estático como corpus curado a mano. Ver ADR-011
+- [x] ~~¿F3.2 necesita integración multimodal externa (GPT-4o, etc.)?~~ → **No**: la visión nativa de Claude Code en la conversación basta. Ver ADR-013
+- [x] ~~¿Ingesta CAD por DXF (`netDxf`) o soporte DWG con SDK propietario?~~ → **ACadSharp, DXF y DWG con la misma API, sin coste de licencia**. Ver ADR-012
+- [ ] Nombre exacto del campo de unidades de cabecera en la API de ACadSharp — supuesto en ADR-012, sin confirmar por lectura de código; lo resuelve el spike no bloqueante (`pocs/003-spike-cad-ingest/`) antes de implementar `CadScaleCalibrator`
+- [ ] De dónde salen las rutas de familias (`.rfa`) para `doc.LoadFamily(...)` cuando `ColocarMobiliarioMasivo`/`CrearAberturasMasivo` necesitan un tipo que el proyecto no tiene cargado — fijarlas contradice R6 ("sin rutas fijas"), pedirlas en cada llamada es más frágil. Abierto, no resolver a la ligera (ver `specs/roadmap.md` §Tier 3, backlog de catálogo)
+- [ ] Umbral de tamaño (nº de elementos) a partir del cual `CrearMurosMasivo`/`CrearForjadosMasivo`/futuros comandos de creación masiva exigen aprobación — propuesta del borrador de ADR-012: N=5, sin calibrar contra uso real
