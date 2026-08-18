@@ -298,14 +298,28 @@ public sealed class RevitContext : IRevitQueryContext
                 }
             }
 
-            try 
+            // Log ANTES de invocar (§5.D.17 / ADR-006, mismo criterio que /exec). "via": "command"
+            // en vez de "roslyn" -- es lo que permite a F2.3 (cosecha del log) calcular el reparto
+            // Roslyn-vs-comando-compilado que el propio DOCUMENTACION.md §6 usa como señal de salud
+            // del catálogo. Antes de este fix, /command no escribía nada: esa señal era imposible de
+            // calcular porque faltaba la mitad de los datos.
+            var sessionLogComando = new Bridge.SessionLog(Bridge.SessionLog.DirectorioPorDefecto());
+            var logIdComando = sessionLogComando.IniciarEntrada(req.Nombre, "command", JsonSerializer.Serialize(req), App.SesionId);
+
+            try
             {
                 var resultado = metodo.Invoke(null, args);
-                return new RespuestaOperacion(Ok: true, Fase: Fase.Ok, Resultado: resultado, IdsCreados: Array.Empty<long>(), Error: null, Traza: null, DuracionMs: sw.ElapsedMilliseconds);
+                var idsCreadosComando = ResultadoScriptExtractor.ExtraerIdsCreados(resultado);
+                sessionLogComando.CompletarEntrada(logIdComando, Fase.Ok, resultado, idsCreadosComando, null, null, sw.ElapsedMilliseconds);
+
+                return new RespuestaOperacion(Ok: true, Fase: Fase.Ok, Resultado: resultado, IdsCreados: idsCreadosComando, Error: null, Traza: null, DuracionMs: sw.ElapsedMilliseconds);
             }
             catch(Exception ex)
             {
-                return new RespuestaOperacion(Ok: false, Fase: Fase.Runtime, Resultado: null, IdsCreados: Array.Empty<long>(), Error: ex.InnerException?.Message ?? ex.Message, Traza: ex.ToString(), DuracionMs: sw.ElapsedMilliseconds);
+                var errorMsgComando = ex.InnerException?.Message ?? ex.Message;
+                sessionLogComando.CompletarEntrada(logIdComando, Fase.Runtime, null, Array.Empty<long>(), errorMsgComando, ex.ToString(), sw.ElapsedMilliseconds);
+
+                return new RespuestaOperacion(Ok: false, Fase: Fase.Runtime, Resultado: null, IdsCreados: Array.Empty<long>(), Error: errorMsgComando, Traza: ex.ToString(), DuracionMs: sw.ElapsedMilliseconds);
             }
         }
         else if (peticion.Operacion == Operaciones.Rollback)

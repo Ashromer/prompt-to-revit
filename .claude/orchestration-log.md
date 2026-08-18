@@ -195,3 +195,65 @@ Formato por entrada — una por lote/feature cerrado, añadida por quien orquest
 - Checkpoint: fix cerrado y verificado a nivel 1-2, nada en vuelo. **No commiteado ni pusheado
   todavía** — pendiente de confirmación del usuario antes de tocar git. Punto seguro para `/clear`
   una vez se decida sobre el commit
+
+## [2026-08-18] Commit + PR del fix, y cierre de los gaps F2.1/F2.3 de Tier 2
+
+- Agentes usados: ninguno (directo en la conversación principal)
+- Contexto: usuario pidió "commitea y déjalo listo para PR mientras no interfiera con el proceso
+  de Antygravity". Antigravity seguía commiteando directo a `dev` en paralelo (apareció el commit
+  `c9fd482` entre una comprobación de `git log` y la siguiente, confirmado antes de tocar nada)
+- Commit del fix anterior (5 hallazgos): rama `fix/tier1-tier2-safeguard-gaps` creada desde `dev`
+  (con `c9fd482` ya incluido), `git add` archivo por archivo (nunca `add .`, para no arrastrar
+  nada de Antigravity), commit `81c666a`, push, PR #7 contra `dev`
+  (github.com/Ashromer/prompt-to-revit/pull/7). Checkout local devuelto a `dev` al terminar para
+  no dejar el working directory en mi rama
+- Segunda ronda, mismo turno: usuario pidió cerrar además los gaps F2.1/F2.3 que quedaron
+  documentados en la auditoría (`/command` no logueaba, cero tests E2E de Tier 2). Al volver a
+  `git checkout fix/tier1-tier2-safeguard-gaps` para continuar, apareció **`ModelingCommands.cs`
+  modificado sin commitear + carpeta nueva `tests/VLM Test 1/` sin trackear** — Antigravity tenía
+  edición en vivo, sin commitear, en el MISMO directorio de trabajo. El `checkout` no dio error
+  (los cambios no chocaban con el diff entre ramas) pero seguir editando ahí habría sido pisar
+  trabajo ajeno en tiempo real, no una simple divergencia de rama a resolver luego
+- Decisión: `git checkout dev` inmediato para devolver el directorio principal exactamente como
+  estaba (con el trabajo en vuelo de Antigravity intacto), y `git worktree add
+  .worktrees/fix-tier1-tier2-safeguard-gaps fix/tier1-tier2-safeguard-gaps` para seguir el fix en
+  una copia de trabajo completamente aparte — el repo ya tenía el patrón (`.worktrees/001-...`,
+  `.worktrees/002-...` de los PoCs), solo había que reutilizarlo
+- Fixes F2.1/F2.3 (en el worktree, sin tocar el directorio principal):
+  1. `/command` (rama `Operaciones.Command` de `RevitContext.Procesar`) tampoco llamaba a
+     `SessionLog` — mismo hallazgo que `/exec` pero no se había tocado en la primera ronda. Ahora
+     loguea con `via: "command"`, lo que hace calculable el reparto Roslyn-vs-comando-compilado
+     que `DOCUMENTACION.md` §6 usa como señal de salud del catálogo (antes de este fix esa cifra
+     era `command: 0` siempre, aunque el catálogo se usara)
+  2. Extraídos `RevitBridge.Core.PreexistingElementGuard` (decisión de si hace falta aprobación)
+     y `RevitBridge.Core.DeletionPreview` (texto de previsualización), ambos testeables sin Revit.
+     Refactorizados `ModelingCommands.BorrarElementosMasivo`, `ModelingCommands.ModificarParametro`
+     y `ParamCommands.ModificarParametroTextoCategoria` para compartirlos en vez de reimplementar
+     cada uno su propia comprobación — es exactamente el patrón que dejó a `ParamCommands` sin
+     protección en la ronda anterior
+  3. `Tier2EndToEndTests.cs`: test E2E que invoca un comando de prueba (sin tipos de Revit, mismo
+     mecanismo de despacho por atributo que `RevitContext.Procesar`) a través del puente completo
+     (McpTools → PipeClient → PipeServer → cola), cubriendo nombre coincidente y nombre que no
+     existe — cierra la parte de F2.1 del criterio de cierre de Tier 2 que es honesto testear sin
+     Revit
+  4. F2.3 (cosecha del log): construido un JSONL sintético de 9 ejecuciones (roslyn+command, un
+     candidato a graduar por repetición, una rotura de API recurrente, dos ruidos de un solo
+     intento) e invocada la skill `/harvest-bridge-log` de verdad contra él. Produjo un informe
+     correcto: candidato a graduar identificado, rotura de API agrupada por causa real (no por
+     texto), los dos ruidos descartados con motivo, y el reparto roslyn/command calculado por
+     primera vez de forma no trivial. No hay código que testear aquí (la skill es un procedimiento,
+     no C#), así que esto es la verificación honesta equivalente
+- Verificación: Debug y Release limpios en el worktree, `dotnet test` **91/91** (82 previos + 9
+  nuevos: 4 `PreexistingElementGuardTests`, 3 `DeletionPreviewTests`, 2 `Tier2EndToEndTests`)
+- Qué falló o costó más de lo esperado: nada en el código; lo que costó más fue darse cuenta a
+  tiempo de que el `checkout` había arrastrado trabajo sin commitear de Antigravity, antes de
+  escribir nada encima
+- Aprendizaje: cuando dos sesiones (dos CLIs, dos agentes) comparten el mismo working directory
+  sin coordinarse, **`git status` antes de cada `checkout`, no solo antes de operaciones
+  destructivas** — un `checkout` a una rama con ficheros sin commitear compatibles no da error y
+  parece seguro, pero puede arrastrar edición en vivo de otra sesión al espacio de trabajo activo.
+  Un `git worktree` aparte es la salida limpia en cuanto se detecta eso, y este repo ya tenía el
+  patrón establecido por los PoCs — reutilizarlo en vez de inventar otra convención
+- Checkpoint: PR #7 actualizada con estos commits (push pendiente de confirmar en el mensaje de
+  cierre de este turno). Nada en vuelo en el worktree. El directorio principal sigue en `dev`,
+  intacto, con el trabajo de Antigravity donde estaba
