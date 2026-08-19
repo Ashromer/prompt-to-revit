@@ -30,12 +30,16 @@ public sealed class PipeServer : IDisposable
     }
 
     /// <summary>
-    /// Nombre por defecto del pipe, derivado del usuario y del proceso de Revit que lo aloja
-    /// (varias instancias de Revit abiertas a la vez no colisionan). Sobrescribible con la
-    /// variable de entorno <c>REVITBRIDGE_PIPE</c> (specs/tech-spec.md §Deployment).
+    /// Nombre por defecto del pipe. Fijo (no incluye el PID de Revit): el lado del puente
+    /// (<c>RevitBridge.Mcp/Program.cs</c>) usa el mismo valor fijo por defecto, y ambos procesos
+    /// arrancan en momentos distintos sin forma de acordar un PID de antemano — incluirlo aquí
+    /// rompía la conexión en TODA sesión sin <c>REVITBRIDGE_PIPE</c> puesta a mano en los dos
+    /// procesos (bug real, encontrado 2026-08-19: el cliente fallaba con "Revit cerrado o addin
+    /// no cargado" incluso con Revit y documento abiertos). Varias instancias de Revit a la vez
+    /// SÍ necesitan <c>REVITBRIDGE_PIPE</c> distinta cada una (specs/tech-spec.md §Deployment) —
+    /// ya no es automático, es la única vía ahora.
     /// </summary>
-    public static string NombrePorDefecto() =>
-        $"RevitBridge_{Environment.UserName}_{Environment.ProcessId}";
+    public static string NombrePorDefecto() => "RevitBridgePipe";
 
     public void Iniciar()
     {

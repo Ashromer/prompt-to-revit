@@ -153,12 +153,13 @@ public class PipeServerTests
     }
 
     [Fact]
-    public void NombrePorDefecto_Incluye_Usuario_Y_Proceso()
+    public void NombrePorDefecto_Es_Fijo_Y_Coincide_Con_El_Del_Puente_Mcp()
     {
+        // Debe ser el mismo valor fijo que usa RevitBridge.Mcp/Program.cs por defecto
+        // ("RevitBridgePipe") — de lo contrario el cliente nunca conecta sin REVITBRIDGE_PIPE
+        // puesta a mano en los dos procesos (bug real, 2026-08-19).
         var nombre = PipeServer.NombrePorDefecto();
 
-        Assert.StartsWith("RevitBridge_", nombre);
-        Assert.Contains(Environment.UserName, nombre);
-        Assert.Contains(Environment.ProcessId.ToString(), nombre);
+        Assert.Equal("RevitBridgePipe", nombre);
     }
 }
