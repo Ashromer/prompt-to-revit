@@ -867,6 +867,9 @@ public static class ModelingCommands
                 }
             }
 
+            if (footprint.Size == 0)
+                throw new ArgumentException($"El footprint generado está vacío. json: {jsonHuella}");
+
             tejado = doc.Create.NewFootPrintRoof(footprint, nivel, roofType, out ModelCurveArray mapeo);
 
             double pendienteRad = pendienteGrados * Math.PI / 180.0;

@@ -492,6 +492,7 @@ confirmados) y las dos decisiones estructurales están tomadas. Tier 0 puede arr
 - **Distribución al estudio** — Cambiaría la salvaguarda principal, que asume un usuario capaz de juzgar el snippet que aprueba
 - **Soporte de Revit 2027** — Cuando exista y el núcleo esté estable
 - **Graduación automática de snippets** — F2.3 propone candidatos; aprobarlos y convertirlos pasa por el flujo normal de desarrollo
+- **Precarga de contexto al arrancar el addin** — Cachear en memoria (dentro del propio `RevitBridge.Addin`, en C#, nunca un proceso Python — ver "Bridge de Python" arriba) el equivalente de `ExportarContextoMasivo`/`ExportarGrafoTopologico` en `IExternalApplication.OnStartup` o al abrir documento, para que la primera `/query` de una sesión nueva de Claude no pague ese round-trip. Idea del usuario (2026-08-19), motivada por la sensación de lentitud de una sesión real, aunque esa sesión en concreto no fue lenta por extracción (`duracion_ms` de sobra: 7-24 ms) sino por errores de razonamiento del propio agente. Sigue siendo una mejora de latencia legítima para sesiones futuras; discovery abierto: cuándo invalidar la caché si el usuario edita el modelo a mano mientras la caché vive
 
 **Cubierto por otro documento**
 

@@ -100,6 +100,16 @@ catálogo y que el instalador no sobrescribe:
 | `/harvest-bridge-log` | Cosechar el log JSONL del **producto**: qué snippets graduan a comando compilado y qué errores recurrentes van a `revit_api_knowledge.md` (§6) |
 | `/harvest-orchestration-log` | Cosechar `.claude/orchestration-log.md`, el log del **proceso** de desarrollo (specify/plan/implement): qué saltos de ceremonia funcionan y cuáles hay que revertir |
 
+**`/revit-bridge` y `/revit-api-2026` se encadenan, nunca una sola** (2026-08-19): en cuanto una
+tarea va a escribir C# nuevo para `/exec` (no solo usar `/query`/`/command` tal cual), activar las
+dos, en ese orden — `/revit-bridge` da la disciplina de uso del bridge (escalera, aprobación,
+triaje), `/revit-api-2026` obliga a leer `revit_api_knowledge.md` antes de escribir el snippet. La
+razón: los fallos más caros no fueron de la Revit API sino del propio harness del bridge
+(`RevitContext.cs` ya envuelve `/exec` en su propia `Transaction` — abrir otra anidada revienta con
+un error que parece Revit colgado; `RoslynCompiler` no antepone ningún `using`), y esos dos ya están
+documentados en `revit_api_knowledge.md` — pero solo si se lee antes de escribir el snippet, no
+después de que falle.
+
 Ninguna duplica reglas: `DOCUMENTACION.md` y `revit_api_knowledge.md` siguen siendo las fuentes
 únicas, las skills son el procedimiento.
 

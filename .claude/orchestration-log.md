@@ -719,3 +719,28 @@ con este fichero en cuanto esa PR se mergee. Aquí solo el resumen y el paso fin
   Pendiente real para la próxima sesión, sin cambios respecto a lo ya anotado: (1) registrar el
   servidor MCP en Claude Code, (2) toda la verificación en Revit vivo acumulada — hoy son 55
   comandos en catálogo, ninguno probado en un Revit real todavía.
+
+## [2026-08-19] Barrido en vivo del catálogo (55 comandos) + bug de `NewFootPrintRoof`
+
+- Agentes usados: ninguno (verificación en Revit vivo, directo en la conversación principal)
+- Saltos respecto al ciclo completo: N/A, es verificación nivel 3, no desarrollo de feature
+- Resultado: barrido sistemático de todo el catálogo contra una casa real (10×8 m) — todo limpio
+  salvo `RenombrarElemento` no-operando en silencio sobre `FamilyInstance` y los comandos del
+  catálogo sin `IFailuresPreprocessor` (ambos documentados como deuda conocida, no bloqueantes).
+  Bug real encontrado y resuelto en vivo: `NewFootPrintRoof` lanzaba `ArgumentNullException`
+  sistemática por el parámetro `out ModelCurveArray` sin pre-inicializar (Revit lo trata como
+  `ref`, no como `out`, pese a la firma pública) — confirmado también fuera del bridge en
+  IronPython puro, lo que descartó `ExternalEvent`/transacción como causa. Fix aplicado en
+  `/exec`; guard añadido en `ModelingCommands.cs` (`CrearTejadoPorHuella`) contra footprint vacío
+- Qué falló o costó más de lo esperado: 9 intentos variando nivel/tipo/vista/regeneración antes de
+  encontrar la causa real (el `out`); ninguno de esos intentos habría dado con ello porque un `out`
+  "no parece tener nada que variar"
+- Aprendizaje: cuando un método de la API falla igual por dos vías de ejecución independientes
+  (bridge/Roslyn y una consola Python sin bridge), descartar de raíz la hipótesis del mecanismo de
+  invocación en vez de seguir variando parámetros uno a uno — ya volcado a
+  `revit_api_knowledge.md`. `/revit-bridge` + `/revit-api-2026` deben encadenarse siempre para
+  `/exec` con C# nuevo — nota añadida a `CLAUDE.md`
+- Checkpoint: `dev` con este commit pendiente de push. `revit_api_knowledge.md` ya actualizado en
+  la sesión (fuera de este repo). Pendiente real para la próxima sesión: registrar el servidor MCP
+  en Claude Code (arrastrado de la sesión anterior), plano de carpintería (vista de Leyenda) sin
+  comando en el catálogo todavía.
