@@ -817,3 +817,57 @@ con este fichero en cuanto esa PR se mergee. Aquí solo el resumen y el paso fin
   con esta entrada. Tier 4 (BIM Manager) queda honestamente en "🟡 EN BRAINSTORMING, diseño parcial"
   (solo fases 1-2). Tier 3 sigue sin avanzar de verdad — pendiente reintentar cuando el usuario tenga
   Revit abierto.
+
+## [2026-08-19] Bug real del pipe encontrado y corregido en dos rondas — bridge verificado en vivo
+
+- Agentes usados: ninguno (todo en la conversación principal, con el usuario operando Revit/Claude
+  Code en directo — cerrar/reabrir Revit, matar procesos, `/mcp`)
+- Contexto: al retomar la verificación de Tier 3 tras la corrección de la entrada anterior, `/query`
+  fallaba sistemáticamente pese a que Revit estaba abierto con un documento cargado — descartaba de
+  raíz la hipótesis con la que había cerrado el fork ("Revit no está abierto, hay que esperar a que
+  el usuario lo abra"), que era falsa
+- Causa raíz encontrada por lectura de código (mensaje exacto de la excepción, "Revit cerrado o
+  addin no cargado", más el mensaje literal de `Environment.ProcessId` en `PipeServer.
+  NombrePorDefecto()`): el addin nombraba el pipe con el PID de Revit
+  (`RevitBridge_{usuario}_{PID}`), pero `RevitBridge.Mcp/Program.cs` usaba un nombre fijo
+  (`"RevitBridgePipe"`) si no había `REVITBRIDGE_PIPE` puesta — nunca coinciden por defecto
+- **Primera ronda (commit `cadf2ec`)**: fix mal enfocado — nombre fijo también en el addin, para que
+  coincidiera con el fallback fijo del puente. Compilaba y pasaba los 111 tests, pero seguía sin
+  conectar en vivo tras el ciclo completo de cerrar Revit/matar el proceso MCP/recompilar/reabrir
+- **Diagnóstico del fallo persistente**: `Get-Process -Id <pid del proceso que bloqueaba el DLL>`
+  reveló el problema real, dos capas más abajo de lo que parecía — `~/.claude.json` (config de
+  Claude Code, fuera del repo) tenía `REVITBRIDGE_PIPE` fijada A MANO a
+  `"RevitBridge_MIGUELS_28724"`, el PID de una sesión de Revit de una sesión anterior, ya cerrada.
+  Esa variable de entorno explícita anulaba el fix de la primera ronda solo del lado del puente —
+  el addin (proceso `Revit.exe`, sin heredar esa variable) usaba su propio valor, otro mismatch
+- **Segunda ronda, propuesta por el usuario y mejor que el fix original (commit `f796d0f`)**: en vez
+  de un nombre fijo (que sacrifica soporte multi-instancia) o una variable fijada a mano (que
+  caduca en cuanto Revit se reinicia), `PipeClient` ahora **descubre el PID de Revit en vivo** en
+  cada envío (`Process.GetProcessesByName("Revit")`, construye
+  `RevitBridge_{usuario}_{pid}` por cada proceso encontrado, prueba cada uno). `PipeServer.
+  NombrePorDefecto()` vuelve a incluir el PID (revertido el fix de la primera ronda). Nuevo test
+  cubre "cero procesos Revit → falla rápido con mensaje claro", testeable en CI sin Revit
+- Se quitó a mano el `REVITBRIDGE_PIPE` obsoleto de `~/.claude.json` (edición mínima, validado el
+  JSON completo con `ConvertFrom-Json` después) — ya no hace falta con el descubrimiento automático
+- **Verificado en Revit vivo por el usuario** (nivel 3 real, no solo nivel 2): tras `/mcp` +
+  reabrir Revit, `mcp__RevitBridge__query` con `documento` y `niveles` devolvieron datos reales del
+  proyecto abierto (`"Proyecto1"`, 2 niveles). Primera verificación de nivel 3 confirmada en esta
+  sesión desde la entrada anterior
+- De paso: el documento activo no estaba guardado en disco (`Path` vacío en la respuesta de
+  `documento`) — se avisó al usuario y lo guardó antes de seguir, por la regla de "guardar siempre
+  antes de una sesión con el bridge"
+- Qué falló o costó más de lo esperado: la primera ronda de fix pareció suficiente (compilaba,
+  tests en verde) pero no lo era — un bug de una sola línea de código escondía un segundo bug de
+  configuración, dos capas independientes con el mismo síntoma. Sin comprobar en vivo tras el
+  primer fix, se habría reportado como resuelto sin estarlo
+- Aprendizaje: "compila y pasa los tests" no es evidencia suficiente para un bug de conectividad
+  entre procesos — hace falta la prueba en vivo, y cuando la prueba en vivo sigue fallando tras un
+  fix que "debería" haberlo arreglado, sospechar de una segunda causa en una capa distinta (config
+  del propio harness, no solo el código del proyecto) en vez de asumir que el fix no se aplicó bien.
+  El propio usuario propuso el diseño correcto (descubrimiento en vivo) tras ver el primer parche —
+  vale la pena exponer la causa raíz completa en vez de solo "ya lo arreglé", da pie a que el
+  usuario vea una solución mejor que la primera que se le ocurrió al agente
+- Checkpoint: `dev` con los commits de esta sesión pusheados (`2e9f7f4`, `cadf2ec`, `f796d0f`).
+  Debug+Release limpios, 112/112 tests. Bridge confirmado funcionando en Revit vivo. Pendiente real
+  para la próxima sesión: el resto del backlog de Tier 3 (F3.2a/F3.2b/F3.7) sigue sin verificación
+  en vivo — ahora que el bridge conecta de forma fiable, es el momento de retomarlo.
