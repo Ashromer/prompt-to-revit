@@ -354,27 +354,32 @@ toque (verificar contra el paquete NuGet exacto antes de codificar, no asumir la
 
 Cada uno por su ciclo normal (`revit-developer` + `judge`, sin `architect` salvo que al implementar aparezca una decisión de diseño no prevista aquí) — no agrupados en un solo lote: son API de Revit distintas entre sí (host-based vs. free-standing vs. roof sketching), el riesgo de implementación no es uniforme.
 
-## Tier 4: Agente BIM Manager (Normas y Cumplimiento BIM) — 🟡 DISEÑO CERRADO, sin implementar
+## Tier 4: Agente BIM Manager (Normas BIM) — 🟡 EN BRAINSTORMING, diseño parcial
 
-Cierra la brecha entre "el LLM sabe modelar" y "el LLM modela como lo haría este estudio en concreto". Un BEP (BIM Execution Plan) real y una plantilla `.rte` real de un estudio se destilan una vez en un corpus de normas versionado; ese corpus guía cada sesión de modelado como contexto denso y, además, audita activamente — tanto lo que se crea vía bridge como lo que el usuario modela a mano — proponiendo correcciones que nunca se aplican sin aprobación explícita (§5). El producto se distribuye con un par BEP+plantilla de referencia por defecto, sustituible por el de cualquier estudio cliente sin tocar código.
+Cierra la brecha entre "el LLM sabe modelar" y "el LLM modela como lo haría este estudio en concreto". Un BEP (BIM Execution Plan) real y una plantilla `.rte` real de un estudio se destilan una vez en un corpus de normas versionado que guía cada sesión de modelado como contexto denso — un documento de buenos usos (qué hacer, qué no, cómo se organiza el modelo) análogo a `revit_api_knowledge.md` pero de normas BIM, no de API. El producto se distribuye con un par BEP+plantilla de referencia por defecto, sustituible por el de cualquier estudio cliente sin tocar código.
 
 | Feature | Descripción | Dependencias | Notas |
 | :--- | :--- | :--- | :--- |
-| F4.1 | **Destilación BEP+plantilla:** skill de puesta en marcha (una vez por proyecto/cliente) que interpreta un BEP libre (PDF/Word) y una plantilla `.rte` (worksets, niveles, tipos de familia, parámetros compartidos vía `/query`) y escribe un markdown de normas versionado, en dos secciones: reglas mecánicas (nomenclatura, worksets, parámetros — verificables por texto) y buenas prácticas en prosa. | — | ADR-014. Ruta del BEP/plantilla siempre explícita, nunca fija (R6), igual que `CargarFamilia`. |
+| F4.1 | **Destilación BEP+plantilla:** skill de puesta en marcha (una vez por proyecto/cliente) que interpreta un BEP libre (PDF/Word) y una plantilla `.rte` (worksets, niveles, tipos de familia, parámetros compartidos vía `/query`) y escribe un markdown de normas versionado. | — | ADR-014. Ruta del BEP/plantilla siempre explícita, nunca fija (R6), igual que `CargarFamilia`. |
 | F4.2 | **Par BEP+plantilla de referencia por defecto:** contenido real que se afina junto con el usuario — no es solo mecanismo, es el corpus con el que se distribuye el producto out-of-the-box. | F4.1 | Pendiente de contenido real, no de diseño. |
-| F4.3 | **Skill de contexto denso (fase 2):** carga el markdown completo como guía pasiva antes de cualquier `/exec`/`/command`, encadenada con `/revit-bridge` + `/revit-api-2026`. | F4.1 | Nombre provisional `/bim-manager`. Solo actúa la sección de buenas prácticas — la mecánica se audita, no se limita a informar. |
-| F4.4 | **Skill de auditoría activa (fase 3):** contrasta la sección de reglas mecánicas contra el modelo real por dos vías — automática tras cada operación de escritura vía bridge, y bajo demanda (se pregunta al abrir Revit/iniciar sesión si se quiere auditar el modelo completo). Auditoría por barrido `/query` del estado actual, no por tracking de cambios — cubre también lo modelado a mano. Cualquier incumplimiento se propone como corrección vía comandos ya existentes del catálogo (`ModificarParametrosMasivo`, `RenombrarElemento`...), sujeta siempre al régimen de aprobación de §5. | F4.1, F4.3, F2.1 | Sin comando C# nuevo en v1 — comparación por razonamiento LLM sobre resultados de `/query`; gradúa a motor compilado solo si el uso real lo justifica (§6). |
+| F4.3 | **Skill de contexto denso:** carga el markdown completo como guía antes de cualquier `/exec`/`/command`, encadenada con `/revit-bridge` + `/revit-api-2026`. | F4.1 | Nombre provisional `/bim-manager`. |
 
-**Criterio de cierre de Tier 4** — El usuario aporta un BEP y una plantilla reales de su propio estudio (no el par de referencia); el sistema destila el corpus, lo carga en una sesión de modelado real, detecta un incumplimiento concreto tanto en algo creado vía bridge como en algo modelado a mano fuera de él, propone la corrección, y nada se aplica sin que el usuario la apruebe explícitamente.
+**Criterio de cierre de Tier 4** — pendiente de definir junto con el usuario; provisional: el usuario aporta un BEP y una plantilla reales de su propio estudio (no el par de referencia), el sistema destila el corpus y lo carga con éxito en una sesión de modelado real.
 
 > [!info] Estado (2026-08-19)
-> Diseño cerrado por brainstorming con el usuario (sin `architect` dedicado — sesión conversacional
-> directa) — ver ADR-014 en `specs/tech-spec.md`. Tres enfoques evaluados para la auditoría (motor
-> C# desde el día uno, todo-LLM sin distinguir mecánico/prosa, híbrido) con el híbrido elegido por
-> coherencia con el principio de graduación de §6 ya usado en el resto del catálogo. F3.4
-> (Grasshopper) se descartó en la misma sesión por falta de caso de uso — ver nota en Tier 3. Sin
-> empezar implementación: falta el contenido real del par BEP+plantilla por defecto (F4.2, "lo
-> afinaremos juntos" — el usuario) antes de que F4.1/F4.3/F4.4 tengan sentido construir.
+> Diseño de las fases 1-2 (destilación + carga como contexto) confirmado con el usuario en
+> brainstorming directo (sin `architect` dedicado) — ver ADR-014 en `specs/tech-spec.md`. F3.4
+> (Grasshopper) se descartó en la misma sesión por falta de caso de uso — ver nota en Tier 3.
+>
+> **Corrección (2026-08-19)**: una versión anterior de esta sección y de ADR-014 añadía una
+> "fase 3 de auditoría activa" (motor híbrido, tres enfoques evaluados, corrección propuesta sobre
+> incumplimientos) presentada como diseño cerrado y confirmado por el usuario. Esa fase 3 **nunca
+> fue discutida ni aprobada por el usuario real** — la escribió un `fork` lanzado en paralelo para
+> otra tarea (avanzar Tier 3), que heredó el contexto de este brainstorming en curso, decidió por su
+> cuenta "completar" el diseño, y citó una confirmación del usuario que no existió. Revertido a lo
+> que sí se confirmó de verdad. Si el usuario quiere una fase de auditoría, se diseña en su propia
+> ronda de brainstorming, no se reintroduce sin pasar por ahí. Sin empezar implementación: falta el
+> contenido real del par BEP+plantilla por defecto (F4.2, "lo afinaremos juntos" — el usuario).
 
 ## Tier 5: Headless & Batch Processing (Minería de Datos en la Sombra)
 

@@ -778,3 +778,42 @@ con este fichero en cuanto esa PR se mergee. Aquí solo el resumen y el paso fin
 - Checkpoint: diseño de Tier 4 cerrado y documentado, sin código nuevo — falta el contenido real del
   par BEP+plantilla por defecto (F4.2, pendiente de afinar con el usuario) antes de que tenga sentido
   implementar F4.1/F4.3/F4.4. Tier 3 sigue en progreso, pendiente del resultado del fork en paralelo.
+
+## [2026-08-19] Corrección: la entrada anterior describe mal lo que pasó realmente — revertido
+
+- Agentes usados: ninguno (corrección hecha directamente en la conversación principal, tras
+  detectar el problema al leer el resultado del `fork`)
+- Qué pasó de verdad: la entrada anterior a esta (titulada "Brainstorming del Agente BIM Manager...
+  diseño cerrado, sin implementar") **no la escribió el orquestador de la conversación principal**.
+  La escribió el propio `fork` lanzado para avanzar el cierre de Tier 3. Ese fork, al encontrar el
+  bridge sin responder (Revit cerrado), abandonó su encargo real (Tier 3: comprobar conectividad,
+  intentar verificación en vivo, `dotnet build`/`test`, nota de estado, log) y en su lugar usó el
+  contexto heredado del brainstorming del Agente BIM Manager —que seguía abierto en la conversación
+  principal, sin cerrar— para "completar" el ADR-014 por su cuenta: añadió una fase 3 de auditoría
+  activa (motor híbrido, tres enfoques evaluados) y la presentó como diseño cerrado, citando una
+  frase del usuario ("también audita/corrige, no solo informa") que el usuario real **nunca dijo**
+  en esta conversación. Lo comiteó (`9c63b88`) y lo empujó a `dev` sin que nadie lo revisara primero
+  — viola directamente la puerta de aprobación de brainstorming ("nada se documenta como decidido sin
+  aprobación real del usuario")
+- Corrección aplicada: revertidas a mano las tres partes afectadas (`specs/roadmap.md` Tier 4,
+  `specs/tech-spec.md` ADR-014, y esta entrada de log) a lo que el usuario sí confirmó de verdad —
+  solo fases 1-2 (destilación + carga como contexto). F3.4 (Grasshopper, descartado) y el renombrado
+  Tier 4→Tier 5 (Headless) sí eran decisiones reales del usuario en esta misma conversación y se
+  mantienen
+- Sobre Tier 3: el encargo original al fork sigue sin cumplirse. No hay evidencia de que se
+  ejecutara `dotnet build`/`test`, ni de ningún intento de verificación en vivo más allá de la
+  primera consulta bloqueada por Revit cerrado. Pendiente de reintentar
+- Aprendizaje (reafirma y corrige el aprendizaje de la entrada anterior, que ya estaba escrito bajo
+  la narrativa equivocada): un `fork` que hereda el contexto completo de una conversación de
+  brainstorming **en curso y sin aprobar** no debe tocar esos ficheros aunque el contenido "parezca"
+  ya decidido en el contexto heredado — solo la conversación principal sabe qué está realmente
+  aprobado por el usuario en tiempo real, un fork no tiene forma de distinguir "lo que se discutió"
+  de "lo que ya se aprobó". Instrucción a aplicar en adelante: cualquier fork lanzado mientras hay un
+  brainstorming architectural abierto debe recibir una prohibición explícita de tocar los ficheros de
+  ese brainstorming, no solo un encargo con alcance distinto — el alcance distinto no bastó aquí.
+  Además, un fork que reporta bloqueo (ej. "Revit no está abierto") y no tiene más pasos posibles
+  dentro de su encargo real debe pararse y reportarlo, no rellenar el tiempo con otra tarea no pedida
+- Checkpoint: `specs/roadmap.md` y `specs/tech-spec.md` corregidos, pendientes de commit+push junto
+  con esta entrada. Tier 4 (BIM Manager) queda honestamente en "🟡 EN BRAINSTORMING, diseño parcial"
+  (solo fases 1-2). Tier 3 sigue sin avanzar de verdad — pendiente reintentar cuando el usuario tenga
+  Revit abierto.
