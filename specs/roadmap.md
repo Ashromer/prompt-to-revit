@@ -4,10 +4,10 @@
 > | **Status** | 🟡 Draft |
 > | **Owner** | Usuario único, arquitecto y desarrollador de plugins de Revit |
 > | **Created** | 2026-08-17 |
-> | **Updated** | 2026-08-18 |
+> | **Updated** | 2026-08-19 |
 > | **Version** | v0.1 |
 > | **Parent specs** | [[product-spec]] · [[tech-spec]] |
-> | **Scope** | Fase 0 de 2 PoCs bloqueantes, más tres tiers de features de complejidad creciente hasta el ciclo de graduación cerrado |
+> | **Scope** | Fase 0 de 2 PoCs bloqueantes, más cinco tiers de features de complejidad creciente hasta el ciclo de graduación cerrado |
 
 ## 🔗 Tracking
 
@@ -210,7 +210,7 @@ Una vez completado el puente seguro (Tier 1) y el catálogo precompilado con sal
 | F3.2a | **Modelado desde CAD (DXF/DWG):** parsing determinista de un fichero CAD → grafo de muros/forjados/aberturas → ráfagas deterministas a `CrearMurosMasivo`/`CrearForjadosMasivo`/`CrearAberturasMasivo` por el Pipe. | F2.1, F2.2 | **Diseño cerrado, ADR-012.** `ACadSharp` (DXF y DWG), proyecto nuevo `RevitBridge.CadIngest`. Antes "F3.2"; dividida porque CAD e imagen son pipelines distintos, no una sola feature |
 | F3.2b | **Modelado desde PDF/imagen (VLM):** el usuario adjunta un croquis/plano en la conversación, Claude lo interpreta con su propia visión y genera el mismo JSON que ya aceptan los comandos de creación masiva. | F2.1, F2.2 | **Diseño cerrado, ADR-013.** Sin integración multimodal externa — la redacción anterior ("requiere GPT-4o") queda obsoleta |
 | F3.3 | **Auditoría Automática Normativa (CTE / QA Agent):** Agente especializado en *Code Compliance*. Revisa planos de accesibilidad o evacuación cruzando el CTE (Código Técnico) con las propiedades del modelo para validar el diseño (ej. "las viviendas A y B cumplen"). | F2.2, F3.1 | Ahorro masivo de horas de justificación de proyectos. |
-| F3.4 | **Generación Paramétrica Híbrida:** El LLM en lugar de modelar, propone inputs a un generador C# de Grasshopper/Revit que calcula 1000 iteraciones (optimización de vistas/áreas) y escupe la óptima. | F2.1 | Une deducción LLM con cómputo bruto C#. **Scope creep sin confirmar** — Grasshopper no aparece en ningún otro sitio del proyecto. |
+| F3.4 | ~~**Generación Paramétrica Híbrida:** El LLM en lugar de modelar, propone inputs a un generador C# de Grasshopper/Revit que calcula 1000 iteraciones (optimización de vistas/áreas) y escupe la óptima.~~ | F2.1 | **DESCARTADO (2026-08-19)** — sin caso de uso real; el bridge ya cubre geometría compleja dirigida por el LLM sin motor externo. Grasshopper no aparece en ningún otro sitio del proyecto. |
 | F3.5 | **Intent-Based Operations:** Traducción de directrices vagas ("Borra las líneas rojas en los planos de planta") a cadenas de ejecución lógicas (Query Planos -> Query Líneas Rojas -> Intersección -> Borrado Seguro F2.4). | F2.2 | Transforma al LLM de un "autómata" a un "delegado" con razonamiento BIM. No es código de addin — disciplina de skill (`/revit-bridge`). |
 | F3.6 | **RAG Knowledge Base & Cristalización Python:** Absorción del Vector Store documental (Revit 2025 API) y destilación de cientos de scripts Python ("one-shot") en Comandos Maestros C# (Tier 2/3), eliminando dependencias de IronPython y errores de tipado. | F3.1 | Cierra la brecha entre el conocimiento abierto (scripts) y la seguridad de ejecución E2E. |
 | F3.7 | **Catálogo de "casa completa":** puertas/ventanas (`CrearAberturasMasivo`), tabiques (parámetro `tipoMuroId` en `CrearMurosMasivo` + `BuscarTiposDeMuroPorFuncion`), mobiliario (`ColocarMobiliarioMasivo`), tejado (`CrearTejadoExtrusion`, `CrearTejadoPorHuella`). | F2.1 | Backlog detallado con enfoque de API por comando más abajo. Beneficia a F3.2a y F3.2b por igual — ambas convergen en el mismo catálogo |
@@ -234,8 +234,10 @@ Una vez completado el puente seguro (Tier 1) y el catálogo precompilado con sal
 >   en `CrearForjadosMasivo`. Detalle en `DOCUMENTACION.md` §9.
 > - **F3.1, F3.2a y F3.2b tienen diseño cerrado** — ADR-011, ADR-012, ADR-013 en `specs/tech-spec.md`.
 >   Pendiente de implementación, no de decisión.
-> - **F3.4 (Grasshopper) es scope creep** — no aparece en ningún otro sitio de `DOCUMENTACION.md`/
->   `tech-spec.md`. Confirmar con el usuario antes de construir nada ahí.
+> - **F3.4 (Grasshopper) — DESCARTADO (2026-08-19, confirmado por el usuario)**: sin caso de uso real,
+>   el bridge ya cubre geometría dirigida por el LLM sin necesitar un motor externo; Grasshopper no
+>   aparece en ningún otro sitio de `DOCUMENTACION.md`/`tech-spec.md`. Fila conservada por trazabilidad,
+>   no se implementa.
 > - **F3.5 no es código de addin** — es disciplina de skill (`/revit-bridge`), no una feature C#
 >   con su propia rama.
 > - **2026-08-18, diseño de F3.1/F3.2a/F3.2b cerrado y aplicado** (ADR-011, ADR-012, ADR-013 en
@@ -352,17 +354,39 @@ toque (verificar contra el paquete NuGet exacto antes de codificar, no asumir la
 
 Cada uno por su ciclo normal (`revit-developer` + `judge`, sin `architect` salvo que al implementar aparezca una decisión de diseño no prevista aquí) — no agrupados en un solo lote: son API de Revit distintas entre sí (host-based vs. free-standing vs. roof sketching), el riesgo de implementación no es uniforme.
 
-## Tier 4: Headless & Batch Processing (Minería de Datos en la Sombra)
+## Tier 4: Agente BIM Manager (Normas y Cumplimiento BIM) — 🟡 DISEÑO CERRADO, sin implementar
+
+Cierra la brecha entre "el LLM sabe modelar" y "el LLM modela como lo haría este estudio en concreto". Un BEP (BIM Execution Plan) real y una plantilla `.rte` real de un estudio se destilan una vez en un corpus de normas versionado; ese corpus guía cada sesión de modelado como contexto denso y, además, audita activamente — tanto lo que se crea vía bridge como lo que el usuario modela a mano — proponiendo correcciones que nunca se aplican sin aprobación explícita (§5). El producto se distribuye con un par BEP+plantilla de referencia por defecto, sustituible por el de cualquier estudio cliente sin tocar código.
+
+| Feature | Descripción | Dependencias | Notas |
+| :--- | :--- | :--- | :--- |
+| F4.1 | **Destilación BEP+plantilla:** skill de puesta en marcha (una vez por proyecto/cliente) que interpreta un BEP libre (PDF/Word) y una plantilla `.rte` (worksets, niveles, tipos de familia, parámetros compartidos vía `/query`) y escribe un markdown de normas versionado, en dos secciones: reglas mecánicas (nomenclatura, worksets, parámetros — verificables por texto) y buenas prácticas en prosa. | — | ADR-014. Ruta del BEP/plantilla siempre explícita, nunca fija (R6), igual que `CargarFamilia`. |
+| F4.2 | **Par BEP+plantilla de referencia por defecto:** contenido real que se afina junto con el usuario — no es solo mecanismo, es el corpus con el que se distribuye el producto out-of-the-box. | F4.1 | Pendiente de contenido real, no de diseño. |
+| F4.3 | **Skill de contexto denso (fase 2):** carga el markdown completo como guía pasiva antes de cualquier `/exec`/`/command`, encadenada con `/revit-bridge` + `/revit-api-2026`. | F4.1 | Nombre provisional `/bim-manager`. Solo actúa la sección de buenas prácticas — la mecánica se audita, no se limita a informar. |
+| F4.4 | **Skill de auditoría activa (fase 3):** contrasta la sección de reglas mecánicas contra el modelo real por dos vías — automática tras cada operación de escritura vía bridge, y bajo demanda (se pregunta al abrir Revit/iniciar sesión si se quiere auditar el modelo completo). Auditoría por barrido `/query` del estado actual, no por tracking de cambios — cubre también lo modelado a mano. Cualquier incumplimiento se propone como corrección vía comandos ya existentes del catálogo (`ModificarParametrosMasivo`, `RenombrarElemento`...), sujeta siempre al régimen de aprobación de §5. | F4.1, F4.3, F2.1 | Sin comando C# nuevo en v1 — comparación por razonamiento LLM sobre resultados de `/query`; gradúa a motor compilado solo si el uso real lo justifica (§6). |
+
+**Criterio de cierre de Tier 4** — El usuario aporta un BEP y una plantilla reales de su propio estudio (no el par de referencia); el sistema destila el corpus, lo carga en una sesión de modelado real, detecta un incumplimiento concreto tanto en algo creado vía bridge como en algo modelado a mano fuera de él, propone la corrección, y nada se aplica sin que el usuario la apruebe explícitamente.
+
+> [!info] Estado (2026-08-19)
+> Diseño cerrado por brainstorming con el usuario (sin `architect` dedicado — sesión conversacional
+> directa) — ver ADR-014 en `specs/tech-spec.md`. Tres enfoques evaluados para la auditoría (motor
+> C# desde el día uno, todo-LLM sin distinguir mecánico/prosa, híbrido) con el híbrido elegido por
+> coherencia con el principio de graduación de §6 ya usado en el resto del catálogo. F3.4
+> (Grasshopper) se descartó en la misma sesión por falta de caso de uso — ver nota en Tier 3. Sin
+> empezar implementación: falta el contenido real del par BEP+plantilla por defecto (F4.2, "lo
+> afinaremos juntos" — el usuario) antes de que F4.1/F4.3/F4.4 tengan sentido construir.
+
+## Tier 5: Headless & Batch Processing (Minería de Datos en la Sombra)
 
 El salto final hacia la automatización a escala empresarial. Permite a la IA indexar y extraer conocimiento de repositorios históricos completos sin la intervención de un usuario abriendo archivos manualmente.
 
 | Feature | Descripción | Dependencias | Notas |
 | :--- | :--- | :--- | :--- |
-| F4.1 | **Headless Revit Engine:** Creación de un *worker* en segundo plano que levante el motor de Revit sin interfaz gráfica (`revit.exe /headless` o equivalente) para procesar archivos silenciosamente. | F3.1 | Técnicamente el formato `.rvt` está cifrado y requiere el motor de Autodesk para su lectura completa. |
-| F4.2 | **Indexador de Directorios:** La IA recibe la ruta a un servidor (ej. `Z:/Proyectos_2025/`) y el MCP orquesta la apertura, extracción de Contexto Denso (F3.1) y cierre de cada `.rvt` en cadena, nutriendo una base de datos global de la oficina. | F4.1 | Permite consultas del tipo: *"Búscame todos los hospitales que hicimos el año pasado con puertas dobles"*. |
-| F4.3 | **Cloud Integration (APS / Forge):** Como alternativa al procesamiento local, derivar la extracción masiva de datos a Autodesk Platform Services mediante Webhooks, liberando la máquina local. | - | Desbloquea la lectura de archivos subidos a Autodesk Construction Cloud (BIM 360) sin descargarlos. |
+| F5.1 | **Headless Revit Engine:** Creación de un *worker* en segundo plano que levante el motor de Revit sin interfaz gráfica (`revit.exe /headless` o equivalente) para procesar archivos silenciosamente. | F3.1 | Técnicamente el formato `.rvt` está cifrado y requiere el motor de Autodesk para su lectura completa. |
+| F5.2 | **Indexador de Directorios:** La IA recibe la ruta a un servidor (ej. `Z:/Proyectos_2025/`) y el MCP orquesta la apertura, extracción de Contexto Denso (F3.1) y cierre de cada `.rvt` en cadena, nutriendo una base de datos global de la oficina. | F5.1 | Permite consultas del tipo: *"Búscame todos los hospitales que hicimos el año pasado con puertas dobles"*. |
+| F5.3 | **Cloud Integration (APS / Forge):** Como alternativa al procesamiento local, derivar la extracción masiva de datos a Autodesk Platform Services mediante Webhooks, liberando la máquina local. | - | Desbloquea la lectura de archivos subidos a Autodesk Construction Cloud (BIM 360) sin descargarlos. |
 
-**Criterio de cierre de Tier 4** — El usuario pide a la IA que busque patrones de error en 50 proyectos antiguos; el sistema arranca un proceso en background que extrae la info de todos ellos sin que se abra una sola ventana de Revit, y presenta el reporte final.
+**Criterio de cierre de Tier 5** — El usuario pide a la IA que busque patrones de error en 50 proyectos antiguos; el sistema arranca un proceso en background que extrae la info de todos ellos sin que se abra una sola ventana de Revit, y presenta el reporte final.
 
 
 ## 🔗 Dependency Graph

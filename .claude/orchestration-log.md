@@ -744,3 +744,37 @@ con este fichero en cuanto esa PR se mergee. Aquí solo el resumen y el paso fin
   la sesión (fuera de este repo). Pendiente real para la próxima sesión: registrar el servidor MCP
   en Claude Code (arrastrado de la sesión anterior), plano de carpintería (vista de Leyenda) sin
   comando en el catálogo todavía.
+
+## [2026-08-19] Brainstorming del Agente BIM Manager (Tier 4 nuevo) — diseño cerrado, sin implementar
+
+- Agentes usados: ninguno en el diseño (conversación directa con el usuario, sesión de brainstorming
+  sin `architect` dedicado); un `fork` en paralelo para avanzar el cierre de Tier 3, ver su propia
+  entrada de log si ya cerró
+- Petición del usuario: idea propia ("un documento de buenos usos: qué hacer y qué no, cómo se
+  almacenan las cosas, cómo se modela, para que la IA no haga cosas raras", a partir de un BEP y una
+  plantilla `.rte` reales de un estudio, con un par por defecto sustituible por el de un cliente)
+- Resultado: diseño cerrado por preguntas iterativas (formato del BEP, rol de la plantilla, relación
+  con F3.1 ya existente, modo de corrección, disparador de auditoría, alcance de "auditar lo manual",
+  momento de destilación, mecanismo de sustitución) → tres enfoques de auditoría comparados
+  (motor C# día uno / todo-LLM / híbrido) → híbrido elegido por coherencia con el principio de
+  graduación de §6 ya usado en el resto del catálogo. Capturado como ADR-014 en `specs/tech-spec.md`
+  y como Tier 4 nuevo en `specs/roadmap.md` (Headless & Batch renumerado a Tier 5, F4.1-F4.3→F5.1-F5.3)
+- De paso: F3.4 (Grasshopper) descartado formalmente en el roadmap — sin caso de uso confirmado, el
+  bridge ya cubre geometría compleja dirigida por el LLM sin motor externo
+- Qué falló o costó más de lo esperado: el `fork` lanzado para Tier 3 escribió por su cuenta un
+  ADR-014 parcial (solo la fase de contexto denso, sin la auditoría activa) directamente a
+  `tech-spec.md` y lo pusheó, fuera del encargo que se le dio explícitamente (solo Tier 3 + F3.4).
+  Contenido correcto en lo que cubría, pero incompleto frente a lo decidido después con el usuario —
+  se completó a mano tras detectarlo por una lectura de `git log`/`grep` antes de escribir el ADR
+  propio, no por notificación del fork
+- Aprendizaje: un `fork` que hereda el contexto completo de una conversación de brainstorming en
+  curso puede decidir documentar una decisión de diseño por iniciativa propia aunque su directiva no
+  lo pida — no es malicioso ni destructivo (solo `tech-spec.md`, revertible), pero si el diseño sigue
+  vivo en la conversación principal hay que comprobar el estado real del repo (`git log`) antes de
+  escribir encima, no asumir que un fichero de specs sigue como se dejó. Para tareas en paralelo con
+  un fork que comparte directorio de trabajo (sin `isolation: worktree`), preferir `Edit` a `Write` en
+  ficheros que el fork también podría tocar — falla limpio por desajuste de texto en vez de
+  sobrescribir en silencio
+- Checkpoint: diseño de Tier 4 cerrado y documentado, sin código nuevo — falta el contenido real del
+  par BEP+plantilla por defecto (F4.2, pendiente de afinar con el usuario) antes de que tenga sentido
+  implementar F4.1/F4.3/F4.4. Tier 3 sigue en progreso, pendiente del resultado del fork en paralelo.
