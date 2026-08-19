@@ -12,8 +12,10 @@ builder.Logging.AddConsole(consoleLogOptions =>
     consoleLogOptions.LogToStandardErrorThreshold = LogLevel.Trace;
 });
 
-// Registrar el cliente de pipe en DI para que las herramientas lo usen
-var nombrePipe = Environment.GetEnvironmentVariable("REVITBRIDGE_PIPE") ?? "RevitBridgePipe";
+// Registrar el cliente de pipe en DI para que las herramientas lo usen. Sin REVITBRIDGE_PIPE,
+// PipeClient descubre el PID de Revit en vivo en cada envío — no hay fallback fijo que pueda
+// quedar obsoleto.
+var nombrePipe = Environment.GetEnvironmentVariable("REVITBRIDGE_PIPE");
 builder.Services.AddSingleton(new PipeClient(nombrePipe));
 
 builder.Services

@@ -42,6 +42,23 @@ public class PipeEndToEndTests
     }
 
     [Fact]
+    public async Task Sin_Nombre_Fijo_Y_Sin_Ningun_Revit_En_Ejecucion_Falla_Rapido_Sin_Intentar_Conectar()
+    {
+        // Descubrimiento por PID (PipeClient(null)): en el entorno de test no hay ningún proceso
+        // llamado "Revit", así que debe fallar inmediatamente con un mensaje claro, sin ni
+        // siquiera intentar un ConnectAsync contra un pipe que no existe.
+        var cliente = new PipeClient(null);
+
+        var excepcion = await Assert.ThrowsAsync<TimeoutException>(() =>
+            cliente.EnviarAsync(
+                new PeticionPipe(Operaciones.Query, default),
+                TimeSpan.FromMilliseconds(300),
+                TimeSpan.FromSeconds(5)));
+
+        Assert.Contains("ningún proceso de Revit", excepcion.Message);
+    }
+
+    [Fact]
     public async Task Sin_Servidor_Escuchando_El_Cliente_Falla_Por_Timeout_De_Conexion_No_Se_Cuelga()
     {
         var cliente = new PipeClient(NombrePipeDeTest()); // nadie escucha este nombre
